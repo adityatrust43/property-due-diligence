@@ -1,6 +1,0 @@
-{
-  "version": 3,
-  "sources": [],
-  "sections": [
-    {"offset": {"line": 1, "column": 0}, "map": {"version":3,"sources":["file:///C:/Users/USER/Documents/Chi%20SquareX/New%20app/frontend/src/app/ai-studio.css"],"sourcesContent":[".ai-studio-scrollbar::-webkit-scrollbar {\r\n  width: 8px;\r\n}\r\n\r\n.ai-studio-scrollbar::-webkit-scrollbar-track {\r\n  background: #121212;\r\n}\r\n\r\n.ai-studio-scrollbar::-webkit-scrollbar-thumb {\r\n  background-color: #2d2d2d;\r\n  border-radius: 4px;\r\n  border: 2px solid #121212;\r\n}\r\n"],"names":[],"mappings":"AAAA;;;;AAIA;;;;AAIA","debugId":null}}]
-}
