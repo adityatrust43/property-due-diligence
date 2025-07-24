@@ -16,9 +16,7 @@ export default function LandingPage() {
         </Button>
         <Button
           className="bg-gray-700 hover:bg-gray-800 text-white font-bold py-3 px-6 rounded-lg text-lg"
-          onClick={() => {
-            alert('This feature is not yet implemented.');
-          }}
+          onClick={() => (window.location.href = '/analyse')}
         >
           Analyse Documents
         </Button>
