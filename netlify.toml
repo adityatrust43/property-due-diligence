@@ -5,5 +5,5 @@
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
-[functions]
+[functions "*"]
   timeout = 250
