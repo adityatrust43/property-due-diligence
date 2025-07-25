@@ -355,7 +355,18 @@ const AnalysisDisplay: React.FC<AnalysisDisplayProps> = ({ result, onShowPdfPage
         )}
         <ul className="space-y-4">
           {result.processedDocuments
-            .sort((a: ProcessedDocument, b: ProcessedDocument) => a.originalImageIndex - b.originalImageIndex)
+            .sort((a: ProcessedDocument, b: ProcessedDocument) => {
+              if (a.date && b.date) {
+                return new Date(a.date).getTime() - new Date(b.date).getTime();
+              }
+              if (a.date) {
+                return -1;
+              }
+              if (b.date) {
+                return 1;
+              }
+              return a.originalImageIndex - b.originalImageIndex;
+            })
             .map((doc: ProcessedDocument) => (
               <ProcessedDocumentCard key={doc.documentId} doc={doc} onShowPdfPage={onShowPdfPage} isMultiFile={isMultiFile} />
           ))}
