@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState, useCallback, useEffect } from 'react';
+import withAuth from '../../components/withAuth';
+import Header from '../../components/Header';
 import FileUpload from '../../components/property/FileUpload';
 import AnalysisDisplay from '../../components/property/AnalysisDisplay';
 import LoadingSpinner from '../../components/property/LoadingSpinner';
@@ -290,15 +292,7 @@ const AnalysePage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center p-4 sm:p-8">
-      <header className="w-full max-w-5xl mb-10 text-center">
-        <div className="flex items-center justify-center mb-2">
-          <DocumentTextIcon className="w-12 h-12 text-blue-500 mr-3" />
-          <h1 className="text-4xl font-bold text-blue-400 tracking-tight">Property Document Analyzer</h1>
-        </div>
-        <p className="text-gray-400 text-lg">
-          AI-powered document indexing, summarization, title chain, and red flag analysis.
-        </p>
-      </header>
+      <Header />
 
       <main className="w-full max-w-5xl bg-gray-800 shadow-xl rounded-xl p-6 sm:p-10">
         <section id="file-upload-section" className="mb-8">
@@ -383,4 +377,4 @@ const AnalysePage: React.FC = () => {
   );
 };
 
-export default AnalysePage;
+export default withAuth(AnalysePage);
