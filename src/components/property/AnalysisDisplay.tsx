@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { DocumentAnalysisOutcome, ProcessedDocument, TitleChainEvent, RedFlagItem, UnsupportedPage, PropertySummary } from '../../types/property';
 import { formatDate } from '../../lib/utils';
 import ReportSection from './ReportSection';
@@ -36,100 +38,29 @@ const PdfLink: React.FC<{fileName: string, pageRef?: string, onShowPdfPage: Anal
   </button>
 );
 
-// New function to render formatted summary text, handling markdown tables
-const renderFormattedSummary = (summaryText: string): JSX.Element[] => {
-  const elements: JSX.Element[] = [];
-  const blocks = summaryText.split(/\n\s*\n/);
-
-  blocks.forEach((block, blockIndex) => {
-    const trimmedBlock = block.trim();
-    if (!trimmedBlock) return;
-
-    const lines = trimmedBlock.split('\n');
-
-    const isMarkdownTable =
-      lines.length >= 2 &&
-      lines[0].trim().startsWith('|') && lines[0].trim().endsWith('|') &&
-      lines[1].trim().match(/^\|([-\s|:]{3,})+\|$/) &&
-      lines.every(line => line.trim().startsWith('|') && line.trim().endsWith('|'));
-
-    if (isMarkdownTable) {
-      const headerContent: JSX.Element[] = [];
-      const bodyRows: JSX.Element[] = [];
-
-      lines.forEach((lineContent, lineIndex) => {
-        const currentTrimmedLine = lineContent.trim();
-        if (!currentTrimmedLine.startsWith('|') || !currentTrimmedLine.endsWith('|')) return;
-
-        const cells = currentTrimmedLine.split('|').slice(1, -1).map(cell => cell.trim());
-
-        if (lineIndex === 0) { // Header row
-          cells.forEach((cell, cellIdx) => {
-            headerContent.push(
-              <th
-                key={`th-${blockIndex}-${cellIdx}`}
-                className="px-3 py-2 text-left text-xs font-semibold text-gray-200 bg-gray-700 border border-gray-600"
-              >
-                {cell}
-              </th>
-            );
-          });
-        } else if (lineIndex === 1 && currentTrimmedLine.match(/^\|([-\s|:]{3,})+\|$/)) {
-          // Separator line, skipped
-        } else { // Body row
-          const rowCells: JSX.Element[] = [];
-          cells.forEach((cell, cellIdx) => {
-            rowCells.push(
-              <td
-                key={`td-${blockIndex}-${lineIndex}-${cellIdx}`}
-                className="px-3 py-2 text-sm text-gray-300 border border-gray-600 whitespace-normal break-words"
-              >
-                {cell}
-              </td>
-            );
-          });
-          if (rowCells.length > 0) {
-             bodyRows.push(<tr key={`row-${blockIndex}-${lineIndex}`}>{rowCells}</tr>);
-          }
-        }
-      });
-
-      elements.push(
-        <div key={`table-container-${blockIndex}`} className="overflow-x-auto my-3">
-          <table
-            key={`table-block-${blockIndex}`}
-            className="min-w-full border-collapse" // Removed divide-y, borders handled by cells
-          >
-            {headerContent.length > 0 && (
-              <thead className="border-b border-gray-600">
-                <tr>{headerContent}</tr>
-              </thead>
-            )}
-            {bodyRows.length > 0 && (
-              <tbody className="bg-gray-800">
-                {bodyRows}
-              </tbody>
-            )}
-          </table>
-        </div>
-      );
-
-    } else { // Regular paragraph block
-      elements.push(
-        <p key={`p-block-${blockIndex}`}>
-          {trimmedBlock.split('\n').map((line, index, arr) => (
-            <React.Fragment key={`line-${index}`}>
-              {line}
-              {index < arr.length - 1 && <br />}
-            </React.Fragment>
-          ))}
-        </p>
-      );
-    }
-  });
-
-  return elements;
-};
+const FormattedSummary: React.FC<{ summaryText: string }> = ({ summaryText }) => (
+  <ReactMarkdown
+    remarkPlugins={[remarkGfm]}
+    components={{
+      h1: ({node, ...props}) => <h1 className="text-xl font-bold my-4" {...props} />,
+      h2: ({node, ...props}) => <h2 className="text-lg font-bold my-3" {...props} />,
+      h3: ({node, ...props}) => <h3 className="text-md font-bold my-2" {...props} />,
+      p: ({node, ...props}) => <p className="my-2" {...props} />,
+      ul: ({node, ...props}) => <ul className="list-disc list-inside my-2 pl-4" {...props} />,
+      ol: ({node, ...props}) => <ol className="list-decimal list-inside my-2 pl-4" {...props} />,
+      li: ({node, ...props}) => <li className="my-1" {...props} />,
+      strong: ({node, ...props}) => <strong className="font-bold" {...props} />,
+      table: ({node, ...props}) => <div className="overflow-x-auto my-4"><table className="min-w-full border-collapse" {...props} /></div>,
+      thead: ({node, ...props}) => <thead className="border-b border-gray-600" {...props} />,
+      th: ({node, ...props}) => <th className="px-3 py-2 text-left text-xs font-semibold text-gray-200 bg-gray-700 border border-gray-600" {...props} />,
+      tbody: ({node, ...props}) => <tbody className="bg-gray-800" {...props} />,
+      tr: ({node, ...props}) => <tr className="border-b border-gray-700" {...props} />,
+      td: ({node, ...props}) => <td className="px-3 py-2 text-sm text-gray-300 border border-gray-600 whitespace-normal break-words" {...props} />,
+    }}
+  >
+    {summaryText}
+  </ReactMarkdown>
+);
 
 
 const ProcessedDocumentCard: React.FC<{ doc: ProcessedDocument; onShowPdfPage: AnalysisDisplayProps['onShowPdfPage']; isMultiFile: boolean }> = ({ doc, onShowPdfPage, isMultiFile }) => {
@@ -189,7 +120,7 @@ const ProcessedDocumentCard: React.FC<{ doc: ProcessedDocument; onShowPdfPage: A
               id={`summary-content-${doc.documentId}`}
               className="prose prose-sm max-w-none text-gray-300 bg-gray-900 p-4 rounded-md border border-gray-700"
             >
-              {renderFormattedSummary(doc.summary)}
+              <FormattedSummary summaryText={doc.summary} />
             </div>
           )}
         </div>

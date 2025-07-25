@@ -193,7 +193,7 @@ const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({ target, onClose }) =>
               </button>
             </div>
           )}
-          <canvas ref={canvasRef} className={`transition-opacity duration-300 ${isRenderingPage || (error && !isRenderingPage) ? 'opacity-25' : 'opacity-100'}`}></canvas>
+          <canvas key={`${target.fileName}-${currentPage}`} ref={canvasRef} className={`transition-opacity duration-300 ${isRenderingPage || (error && !isRenderingPage) ? 'opacity-25' : 'opacity-100'}`}></canvas>
         </div>
 
         <footer className="flex items-center justify-between p-3 border-t border-gray-700 bg-gray-900">
