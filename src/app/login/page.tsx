@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { getAuth, signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { getAuth, signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { app } from '../../lib/firebase';
 import { useRouter } from 'next/navigation';
 
@@ -10,6 +10,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
   const auth = getAuth(app);
   const router = useRouter();
 
@@ -18,6 +19,20 @@ export default function LoginPage() {
     try {
       await signInWithPopup(auth, provider);
       router.push('/analyse');
+    } catch (error: any) {
+      setError(error.message);
+    }
+  };
+
+  const handlePasswordReset = async () => {
+    if (!email) {
+      setError("Please enter your email address to reset your password.");
+      return;
+    }
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setMessage("Password reset email sent. Please check your inbox.");
+      setError(null);
     } catch (error: any) {
       setError(error.message);
     }
@@ -42,6 +57,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md p-8 space-y-8 bg-gray-800 rounded-lg shadow-lg">
         <h1 className="text-3xl font-bold text-center">{isLogin ? 'Login' : 'Sign Up'}</h1>
         {error && <p className="text-red-500 text-center">{error}</p>}
+        {message && <p className="text-green-500 text-center">{message}</p>}
         <form onSubmit={handleEmailAuth} className="space-y-6">
           <div>
             <label className="block text-sm font-medium">Email</label>
@@ -70,10 +86,15 @@ export default function LoginPage() {
             {isLogin ? 'Login' : 'Sign Up'}
           </button>
         </form>
-        <div className="text-center">
+        <div className="flex items-center justify-between">
           <button onClick={() => setIsLogin(!isLogin)} className="text-sm text-blue-400 hover:underline">
             {isLogin ? 'Need an account? Sign Up' : 'Already have an account? Login'}
           </button>
+          {isLogin && (
+            <button onClick={handlePasswordReset} className="text-sm text-blue-400 hover:underline">
+              Forgot Password?
+            </button>
+          )}
         </div>
         <div className="relative">
           <div className="absolute inset-0 flex items-center">
