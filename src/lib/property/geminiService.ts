@@ -1,7 +1,7 @@
-
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
+import { PDFDocument } from 'pdf-lib';
 import {
-    DocumentAnalysisOutcome, ProcessedDocument, GeminiContentPart, TitleChainEvent, RedFlagItem
+    DocumentAnalysisOutcome, ProcessedDocument, GeminiContentPart, TitleChainEvent, RedFlagItem, PropertySummary
 } from '../../types/property';
 
 // Dynamically import pdfjs-dist
@@ -21,11 +21,8 @@ async function loadPdfJs() {
   }
 }
 
-// PDF.js worker is now configured globally in index.tsx by setting GlobalWorkerOptions.workerSrc and isWorkerDisabled.
-// The imported pdfjsLib.getDocument will use this global configuration.
-
-const IMAGE_MIME_TYPE = 'image/jpeg'; // Use JPEG for smaller request payloads
-const PDF_RENDERING_SCALE = 1.2; // Reduced scale for smaller image dimensions
+const IMAGE_MIME_TYPE = 'image/jpeg';
+const PDF_RENDERING_SCALE = 1.2;
 const WARN_THRESHOLD_PAGES_PER_FILE = 50;
 const WARN_THRESHOLD_TOTAL_PAGES = 150;
 
@@ -39,7 +36,6 @@ const convertSinglePdfToImageParts = async (
 ): Promise<{imageParts: GeminiContentPart[], totalPages: number, fileName: string}> => {
   await loadPdfJs();
   if (!pdfjsLib) {
-    // If pdfjsLib is not available (e.g., on the server), return empty parts.
     return { imageParts: [], totalPages: 0, fileName: file.name };
   }
   const typedArray = await fileToTypedArray(file);
@@ -74,12 +70,19 @@ const convertSinglePdfToImageParts = async (
     });
     onProgress({ processed: i, total: totalPages, fileName: file.name });
     
-    // Explicitly clean up resources to prevent canvas reuse errors.
     page.cleanup();
     canvas.width = 0;
     canvas.height = 0;
   }
   return {imageParts, totalPages, fileName: file.name};
+};
+
+const splitPdf = async (sourcePdf: File, pageNumbers: number[]): Promise<Uint8Array> => {
+  const pdfDoc = await PDFDocument.load(await sourcePdf.arrayBuffer());
+  const subDocument = await PDFDocument.create();
+  const copiedPages = await subDocument.copyPages(pdfDoc, pageNumbers.map(n => n - 1));
+  copiedPages.forEach(page => subDocument.addPage(page));
+  return subDocument.save();
 };
 
 const generateSimplifiedAnalysisPrompt = (inputFilesSummary: {name: string, totalPages: number}[], totalCombinedPages: number): string => {
@@ -94,8 +97,13 @@ ${fileListString}
 I will provide you with a series of images. These images are a concatenation of all pages from the above documents, in the order they were listed.
 Your task is to analyze ALL provided images as a single, consolidated set and perform the following:
 
-1.  Identify distinct document sections (e.g., Sale Deed, Lease Agreement, Tax Receipt, Legal Notice, Property Title Search Report).
-2.  For each identified document section:
+1.  **Overall Property Summary**: First, create a top-level summary of the property.
+    a.  Based on the entire set of documents, determine the \`currentOwner\`. This should be the final owner after the last transaction in the title chain.
+    b.  Provide a \`propertyBrief\`. This should be a concise, one-paragraph summary of the property's key identifiers (like area, location, address, or type) as derived from the most recent and relevant documents.
+    c.  This summary should be placed in a \`propertySummary\` object at the root of the final JSON.
+
+2.  Identify distinct document sections (e.g., Sale Deed, Lease Agreement, Tax Receipt, Legal Notice, Property Title Search Report).
+3.  For each identified document section:
     a.  Determine its \`documentType\`.
     b.  Specify its \`sourceFileName\` from the list above.
     c.  Specify its page range within that source file (\`pageRangeInSourceFile\`, e.g., "Pages 1-5").
@@ -115,7 +123,7 @@ Your task is to analyze ALL provided images as a single, consolidated set and pe
     g.  Assign a unique \`documentId\` (e.g., "doc_file0_idx0_type").
     h.  Provide the \`originalImageIndex\`, the 0-based index of the first image *in the combined image array* where this document section begins.
 
-3.  Construct a "Title Chain / Ownership Sequence" by identifying documents that represent transfers of ownership or significant encumbrances (e.g., Sale Deed, Gift Deed, Mortgage Deed, Release Deed, Inheritance documents, Court Orders affecting title).
+4.  Construct a "Title Chain / Ownership Sequence" by identifying documents that represent transfers of ownership (e.g., Sale Deed, Gift Deed, Mortgage Deed, Release Deed, Inheritance documents, Court Orders affecting title).
     For each such event, extract:
     a. 'eventId': A unique string ID for this event (e.g., "tc_event_0").
     b. 'order': A sequential number starting from 0 for the chronological order of events. Events must be strictly ordered from oldest to newest.
@@ -128,28 +136,16 @@ Your task is to analyze ALL provided images as a single, consolidated set and pe
     i. 'relatedDocumentId': (Optional) The 'documentId' from the 'processedDocuments' list if this event is directly evidenced by one of those specific documents.
     Present these events in an array called \`titleChainEvents\`, ordered chronologically from earliest to latest. If no such events are found, \`titleChainEvents\` should be an empty array or omitted.
 
-4.  Identify "Potential Red Flags" that a lawyer conducting property due diligence should be aware of. These are issues or inconsistencies that might indicate problems with title, legality, or completeness of the documentation.
+5.  Identify "Potential Red Flags" that a lawyer conducting property due diligence should be aware of. These are issues or inconsistencies that might indicate problems with title, legality, or completeness of the documentation.
     For each identified red flag, provide:
     a. 'redFlagId': A unique string ID for this red flag (e.g., "rf_0").
     b. 'description': A clear and concise explanation of the potential issue.
     c. 'severity': Assign a severity level - 'Low', 'Medium', or 'High'.
-        - 'Low': Minor discrepancies, points of attention that are likely explainable or have minor impact.
-        - 'Medium': Issues that require further investigation and could potentially impact the transaction or title.
-        - 'High': Significant concerns that could seriously jeopardize title, legality, or enforceability, or indicate potential fraud.
     d. 'suggestion': A brief, actionable suggestion on what to investigate further, what specific clarification to seek, or what documents might be needed to resolve the concern.
     e. 'relatedDocumentIds': (Optional) An array of 'documentId's from the 'processedDocuments' list that are relevant to this red flag.
-    Examples of red flags include:
-        - Discrepancies in names, dates, or property descriptions across related documents.
-        - Unexplained gaps or inconsistencies in the title chain.
-        - Undischarged mortgages, liens, or encumbrances.
-        - Ambiguous or contradictory clauses within a document or between documents.
-        - Signs of improper execution (e.g., missing critical signatures, attestations, or notarizations, if apparent).
-        - Missing essential documents implied by other documents (e.g., a Sale Deed refers to a Power of Attorney that is not provided).
-        - Property description changes significantly without clear explanation in subsequent deeds.
-        - Claims or litigation mentioned but not fully resolved or documented.
     Present these red flags in an array called \`redFlags\`. If no significant red flags are identified, \`redFlags\` should be an empty array or omitted.
 
-5.  List any pages that were entirely unprocessable or appear to be genuinely blank/irrelevant (e.g., separator sheets, fully blank pages, pages with only a logo and no substantive content) in the \`unsupportedPages\` array, specifying their \`sourceFileName\`, \`pageNumberInSourceFile\`, and a \`reason\` (e.g., "Page is blank", "Page appears to be a scanned cover sheet with no textual content", "Illegible content due to very poor scan quality"). Avoid listing pages as unsupported if they contain any discernible textual or structured data, even if it's sparse.
+6.  List any pages that were entirely unprocessable or appear to be genuinely blank/irrelevant in the \`unsupportedPages\` array, specifying their \`sourceFileName\`, \`pageNumberInSourceFile\`, and a \`reason\`.
 
 IMPORTANT: Your entire response MUST be a single, valid JSON object. Do not include any text before or after the JSON object.
 The JSON object should conform to the following TypeScript interface structure:
@@ -160,17 +156,17 @@ interface ProcessedDocument {
   originalImageIndex: number;
   documentType: string;
   pageRangeInSourceFile?: string;
-  summary: string; // This is the detailed explanation, narrative, with extracted specifics and potential markdown tables.
+  summary: string;
   status: 'Processed' | 'Unsupported';
-  date?: string; // Main document date
-  partiesInvolved?: string; // Key parties
+  date?: string;
+  partiesInvolved?: string;
   unsupportedReason?: string;
 }
 
 interface TitleChainEvent {
   eventId: string;
   order: number;
-  date: string; // "YYYY-MM-DD"
+  date: string;
   documentType: string;
   transferor: string;
   transferee: string;
@@ -187,140 +183,25 @@ interface RedFlagItem {
   relatedDocumentIds?: string[];
 }
 
+interface PropertySummary {
+  currentOwner: string;
+  propertyBrief: string;
+}
+
 interface DocumentAnalysisOutcome {
-  inputFiles: { name: string; totalPages: number }[]; // Populate this with: ${JSON.stringify(inputFilesSummary)}
+  propertySummary?: PropertySummary;
+  inputFiles: { name: string; totalPages: number }[];
   processedDocuments: ProcessedDocument[];
   titleChainEvents?: TitleChainEvent[];
-  redFlags?: RedFlagItem[]; // Array of potential red flags.
+  redFlags?: RedFlagItem[];
   unsupportedPages: {
     sourceFileName: string;
     pageNumberInSourceFile: string;
     reason: string;
   }[];
 }
-
-Analyze the provided images and construct the JSON output. Be factual, thorough, and clear. Ensure all data points are accurately extracted. If information for an optional field (like \`date\` or \`partiesInvolved\` for ProcessedDocument, or \`propertyDescription\` or \`relatedDocumentId\` for TitleChainEvent, or \`relatedDocumentIds\` for RedFlagItem) isn't clear or applicable, omit it or use an empty array where appropriate.
 `;
 };
-
-
-const getMockAnalysisResult = (inputFiles: {name: string, totalPages: number}[]): DocumentAnalysisOutcome => {
-  console.warn("Using MOCKED analysis result for document indexing, summarization, title chain, and red flags.");
-  const mainFileName = inputFiles.length > 0 ? inputFiles[0].name : "mockFile1.pdf";
-  const secondFileName = inputFiles.length > 1 ? inputFiles[1].name : "mockFile2.pdf";
-
-  return {
-    inputFiles: inputFiles,
-    processedDocuments: [
-      {
-        documentId: "mock_doc_file0_idx0_saledeed",
-        sourceFileName: mainFileName,
-        originalImageIndex: 0,
-        documentType: "Sale Deed (Mock)",
-        pageRangeInSourceFile: "Pages 1-3",
-        summary: `This mock Sale Deed, executed on October 26, 2023, meticulously documents the transfer of property ownership for 'Plot A, Riverview Estates', measuring 2.5 acres (approx. 108,900 sq ft). The seller, Mr. Samuel "Sam" Mockington (DOB: 15/05/1965), formally agreed to convey the property rights to Ms. Eleanor Buyer Testington (DOB: 20/08/1982, resident of 123 Fake St, Anytown). The transaction involved a total consideration of $100,000.00 USD, paid via check no. 567890 from Anytown Bank. Registration of this deed occurred on October 28, 2023, under document number REG-2023-XYZ-789. \n\nKey clauses detail the property's specific boundaries (North: Public Road, South: Plot B, East: Green River, West: Plot C) and legal description. The deed confirms receipt of payment and legally establishes Ms. Testington as the new, undisputed owner, extinguishing all prior claims by Mr. Mockington. This document is pivotal for Ms. Testington to prove her clear title. \n\nProperty Schedule (Appendix A referenced): \n| Item          | Description                   | Value      |\n|---------------|-------------------------------|------------|\n| Land          | Plot A, Riverview Estates     | $80,000.00 |\n| Structure     | Old Shed (to be demolished)   | $500.00    |\n| Easement      | Right of way for utilities    | N/A        |\n (Mock explanation for ${mainFileName})`,
-        status: 'Processed',
-        date: "2023-10-26",
-        partiesInvolved: "Mr. Samuel Mockington (Seller), Ms. Eleanor Buyer Testington (Buyer)",
-      },
-      {
-        documentId: "mock_doc_file0_idx3_receipt",
-        sourceFileName: mainFileName,
-        originalImageIndex: 3,
-        documentType: "Property Tax Receipt (Mock)",
-        pageRangeInSourceFile: "Page 4",
-        summary: `This document is a mock property tax receipt for the fiscal year 2022-2023, concerning 'Plot A, Riverview Estates', Assessee ID: AT7890. It serves as official proof that Ms. Eleanor Buyer Testington has fulfilled her tax obligations amounting to $1,250.50 for the said property. The receipt, issued by Anytown Municipal Tax Authority, is dated April 15, 2023 (Receipt No. TXN-MOCK-00123). Payment was made via online transfer. This receipt is important for demonstrating compliance with local tax laws. Tax Period: 01/04/2022 to 31/03/2023. (Mock explanation for ${mainFileName})`,
-        status: 'Processed',
-        date: "2023-04-15",
-        partiesInvolved: "Ms. Eleanor Buyer Testington, Anytown Municipal Tax Authority",
-      },
-      {
-        documentId: "mock_doc_file1_idx0_lease",
-        sourceFileName: secondFileName,
-        originalImageIndex: inputFiles.length > 0 ? inputFiles[0].totalPages : 0, // Mock index after first file
-        documentType: "Commercial Lease Agreement (Mock)",
-        pageRangeInSourceFile: "Pages 1-2",
-        summary: `This mock Commercial Lease Agreement, dated January 10, 2024, outlines terms for renting 'Unit B, Commerce Plaza, Downtown Anytown', a space of 1500 sq ft. Landlord: Placeholder Properties LLC. Tenant: Example Innovations Inc. Lease Term: 36 months, commencing February 1, 2024, and ending January 31, 2027. Monthly Rent: $2,500.00, due on the 1st of each month. Security Deposit: $5,000.00. Permitted Use: Office space for software development. Renewal Option: Tenant has one option to renew for 24 months at Fair Market Value, with 6 months prior notice. (Mock explanation for ${secondFileName})`,
-        status: 'Processed',
-        date: "2024-01-10",
-        partiesInvolved: "Placeholder Properties LLC (Landlord), Example Innovations Inc. (Tenant)",
-      },
-      {
-        documentId: "mock_doc_file1_idx2_unsupported",
-        sourceFileName: secondFileName,
-        originalImageIndex: (inputFiles.length > 0 ? inputFiles[0].totalPages : 0) + 2, // Mock index
-        documentType: "Unknown Document Section (Mock)",
-        pageRangeInSourceFile: "Page 3",
-        summary: "The content of this section could not be reliably interpreted or identified as a distinct document. It appears to be of poor scan quality with largely illegible text, preventing any meaningful analysis, narrative extraction, or specific data point identification (e.g., names, dates, amounts, measurements).",
-        status: 'Unsupported',
-        unsupportedReason: "Poor scan quality, illegible text (mock).",
-      }
-    ],
-    titleChainEvents: [
-        {
-            eventId: "tc_event_0_mock",
-            order: 0,
-            date: "2005-03-15",
-            documentType: "Sale Deed (Mock)",
-            transferor: "Original Allotment Authority / John Doe Sr.",
-            transferee: "Jane Smith",
-            propertyDescription: "Plot A, Riverview Estates",
-            summaryOfTransaction: "Initial purchase or allotment of Plot A to Jane Smith.",
-            relatedDocumentId: undefined,
-        },
-        {
-            eventId: "tc_event_1_mock",
-            order: 1,
-            date: "2010-07-20",
-            documentType: "Mortgage Deed (Mock)",
-            transferor: "Jane Smith (Mortgagor)",
-            transferee: "Anytown Bank (Mortgagee)",
-            propertyDescription: "Plot A, Riverview Estates",
-            summaryOfTransaction: "Jane Smith created a mortgage on Plot A in favor of Anytown Bank for a loan of $50,000.",
-            relatedDocumentId: undefined, 
-        },
-        {
-            eventId: "tc_event_2_mock",
-            order: 2,
-            date: "2023-10-26",
-            documentType: "Sale Deed (Mock)", // This event leads to the Sale Deed processed
-            transferor: "Jane Smith (Previous Owner, presumably cleared mortgage or bank consent obtained)", // Changed to demonstrate a chain leading to Mockington
-            transferee: "Mr. Samuel Mockington",
-            propertyDescription: "Plot A, Riverview Estates",
-            summaryOfTransaction: "Sale of Plot A from Jane Smith to Mr. Samuel Mockington. This transaction corresponds to the processed Sale Deed where Mr. Mockington is now the seller.",
-            // relatedDocumentId: "mock_doc_file0_idx0_saledeed" // If Mr. Mockington bought via this deed, and then sells it.
-        }
-    ],
-    redFlags: [
-        {
-            redFlagId: "rf_mock_0",
-            description: "The name of the seller in the Sale Deed (mock_doc_file0_idx0_saledeed) is 'Mr. Samuel Mockington', but a title chain event (tc_event_1_mock) shows a mortgage by 'Jane Smith' on the same property. While tc_event_2_mock shows Jane Smith selling to Samuel Mockington, ensure the mortgage from tc_event_1_mock was properly discharged or consented to by Anytown Bank before or during the sale from Jane Smith to Samuel Mockington.",
-            severity: 'Medium',
-            suggestion: "Verify if the mortgage by Jane Smith to Anytown Bank (ref tc_event_1_mock) has been fully discharged. Look for a Deed of Release or No Objection Certificate from Anytown Bank. Confirm no outstanding liabilities from this mortgage affect Mr. Mockington's title or Ms. Testington's subsequent purchase.",
-            relatedDocumentIds: ["mock_doc_file0_idx0_saledeed"]
-        },
-        {
-            redFlagId: "rf_mock_1",
-            description: "The property tax receipt (mock_doc_file0_idx3_receipt) is in the name of Ms. Eleanor Buyer Testington for the fiscal year 2022-2023, while the sale deed to her is dated October 26, 2023. This implies she paid taxes before legally owning the property or there's a reconciliation needed for pre-ownership period taxes.",
-            severity: 'Low',
-            suggestion: "Clarify who was responsible for property taxes for the period prior to Ms. Testington's ownership (October 26, 2023) within the 2022-2023 fiscal year. Ensure any pro-rata tax adjustments between seller and buyer are accounted for as per the sale agreement (if mentioned).",
-            relatedDocumentIds: ["mock_doc_file0_idx0_saledeed", "mock_doc_file0_idx3_receipt"]
-        },
-        {
-            redFlagId: "rf_mock_2",
-            description: "One document section (mock_doc_file1_idx2_unsupported) from the second file was unsupported due to poor scan quality. This page might contain critical information.",
-            severity: 'High',
-            suggestion: "Attempt to obtain a clearer copy of page 3 from 'mockFile2.pdf'. The illegible content could be crucial for understanding the full context or terms related to other documents from this file.",
-            relatedDocumentIds: ["mock_doc_file1_idx2_unsupported"]
-        }
-    ],
-    unsupportedPages: [
-      { sourceFileName: mainFileName, pageNumberInSourceFile: "5", reason: "The page is entirely blank and does not appear to be part of any document structure (mock)." },
-      { sourceFileName: secondFileName, pageNumberInSourceFile: "4", reason: "This page contains only a photograph with no discernible text or document-related information (mock)." }
-    ],
-  };
-};
-
 
 export const analyzeDocumentWithGemini = async (
     files: File[],

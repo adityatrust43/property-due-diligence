@@ -110,6 +110,7 @@ const AnalysePage: React.FC = () => {
       setError("PDF library is not loaded yet. Please wait a moment and try again.");
       return;
     }
+
     const fileToPreview = selectedFiles.find(f => f.name === sourceFileName);
     if (!fileToPreview) {
       console.error(`File "${sourceFileName}" not found in selected files.`);
@@ -315,14 +316,12 @@ const AnalysePage: React.FC = () => {
               className="px-8 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
               aria-live="polite"
             >
-              {isLoading && (loadingMessage.startsWith("Initiating") || loadingMessage.includes("Extracting") || loadingMessage.includes("Sending"))
-                ? loadingMessage
-                : (selectedFiles.length > 0 ? `Analyze ${selectedFiles.length} File(s)` : "Analyze")}
+              {isLoading ? loadingMessage : (selectedFiles.length > 0 ? `Analyze ${selectedFiles.length} File(s)` : "Analyze")}
             </button>
           </div>
         )}
 
-        {isLoading && (loadingMessage.startsWith("Initiating") || loadingMessage.includes("Extracting") || loadingMessage.includes("Sending") || loadingMessage.includes("Parsing") || loadingMessage.includes("Loading preview")) && (
+        {isLoading && (
           <div className="my-10 flex flex-col items-center justify-center">
             <LoadingSpinner />
             <p className="text-sm text-gray-400 mt-2 text-center">{loadingMessage}</p>

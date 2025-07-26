@@ -43,6 +43,7 @@ export interface DocumentAnalysisOutcome {
   titleChainEvents?: TitleChainEvent[];
   redFlags?: RedFlagItem[]; // NEW: Array of potential red flags
   unsupportedPages: UnsupportedPage[];
+  subDocuments?: Record<string, Uint8Array>;
 }
 
 export interface UnsupportedPage {

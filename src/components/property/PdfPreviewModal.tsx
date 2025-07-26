@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 // Import pdfjs-dist using namespace import
 import * as pdfjsStarImport from 'pdfjs-dist';
-import { XCircleIcon } from './icons'; 
+import { XCircleIcon, RotateIcon, ZoomInIcon, ZoomOutIcon, RotateLeftIcon } from './icons';
 
 // Access PDF.js types from the star import namespace
 type PDFJSGlobalPDFDocumentProxy = pdfjsStarImport.PDFDocumentProxy;
@@ -22,39 +22,44 @@ interface PdfPreviewModalProps {
 const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({ target, onClose }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageTransforms, setPageTransforms] = useState<Map<number, { rotation: number; scale: number }>>(new Map());
   const [isRenderingPage, setIsRenderingPage] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const renderTaskRef = useRef<PDFJSRenderTask | null>(null); 
+  const renderTaskRef = useRef<PDFJSRenderTask | null>(null);
   const [retryAttempt, setRetryAttempt] = useState(0);
-  const renderGenerationRef = useRef(0); // Generation counter to prevent race conditions
+  const renderGenerationRef = useRef(0);
+
+  const getPageTransform = useCallback((pageNumber: number) => {
+    return pageTransforms.get(pageNumber) || { rotation: 0, scale: 0.9 };
+  }, [pageTransforms]);
 
   useEffect(() => {
-    if (target && target.pdfDoc) { 
+    if (target && target.pdfDoc) {
       const validInitialPage = Math.min(Math.max(1, target.initialPage), target.totalPages);
       setCurrentPage(validInitialPage);
+      setPageTransforms(new Map());
       setError(null);
-      setRetryAttempt(0); 
+      setRetryAttempt(0);
     } else {
       setCurrentPage(1);
       setError(null);
-      if (renderTaskRef.current && typeof renderTaskRef.current.cancel === 'function') {
+      if (renderTaskRef.current) {
         renderTaskRef.current.cancel();
         renderTaskRef.current = null;
       }
       if (canvasRef.current) {
         const context = canvasRef.current.getContext('2d');
         if (context) {
-            context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+          context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
         }
       }
     }
   }, [target]);
 
   const renderPage = useCallback(async () => {
-    // Increment generation ID. This helps us know if this render call is the latest one.
     const generation = ++renderGenerationRef.current;
 
-    if (!target || !target.pdfDoc || !canvasRef.current ) { 
+    if (!target || !target.pdfDoc || !canvasRef.current) {
       if (canvasRef.current) {
         const context = canvasRef.current.getContext('2d');
         if (context) context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
@@ -62,10 +67,9 @@ const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({ target, onClose }) =>
       setIsRenderingPage(false);
       return;
     }
-    
-    // Cancel any previous, still-running render task.
+
     if (renderTaskRef.current) {
-      await renderTaskRef.current.cancel();
+      renderTaskRef.current.cancel();
     }
 
     setIsRenderingPage(true);
@@ -78,32 +82,29 @@ const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({ target, onClose }) =>
       setIsRenderingPage(false);
       return;
     }
-    
+
     context.clearRect(0, 0, canvas.width, canvas.height);
 
     try {
       const page = await target.pdfDoc.getPage(currentPage);
-      const viewport = page.getViewport({ scale: 1.0 });
+      const { rotation, scale } = getPageTransform(currentPage);
+      const viewport = page.getViewport({ scale, rotation });
 
       canvas.height = viewport.height;
       canvas.width = viewport.width;
 
-      const renderTask = page.render({ canvasContext: context, viewport: viewport });
+      const renderTask = page.render({ canvasContext: context, viewport });
       renderTaskRef.current = renderTask;
 
       await renderTask.promise;
 
-      // SUCCESS: Only update state if this is the latest render request.
       if (generation === renderGenerationRef.current) {
         setIsRenderingPage(false);
         renderTaskRef.current = null;
       }
-
     } catch (e: any) {
-      // ERROR: Only update state if this error is from the latest render request.
       if (generation === renderGenerationRef.current) {
         renderTaskRef.current = null;
-        // Don't show an error for cancellations, as they are expected when navigating quickly.
         if (e.name !== 'RenderingCancelledException') {
           console.error(`Error rendering page ${currentPage} of ${target.fileName}:`, e);
           setError(`Failed to render page ${currentPage}: ${e.message || String(e)}`);
@@ -111,21 +112,19 @@ const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({ target, onClose }) =>
         }
       }
     }
-  }, [target, currentPage]); 
+  }, [target, currentPage, getPageTransform]);
 
   useEffect(() => {
-    if (target && target.pdfDoc) { 
+    if (target && target.pdfDoc) {
       renderPage();
     }
-    
-    // The cleanup function is critical to cancel renders when the modal closes or dependencies change.
     return () => {
-      if (renderTaskRef.current && typeof renderTaskRef.current.cancel === 'function') {
+      if (renderTaskRef.current) {
         renderTaskRef.current.cancel();
-        renderTaskRef.current = null; 
+        renderTaskRef.current = null;
       }
     };
-  }, [target, currentPage, renderPage, retryAttempt]);
+  }, [target, currentPage, renderPage, retryAttempt, pageTransforms]);
 
 
   const goToPrevPage = () => {
@@ -145,8 +144,22 @@ const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({ target, onClose }) =>
         setRetryAttempt(c => c + 1);
     }
   };
-  
-  if (!target ) return null;
+
+  const handleRotate = (clockwise: boolean) => {
+    const currentTransform = getPageTransform(currentPage);
+    const newRotation = clockwise
+      ? (currentTransform.rotation + 90) % 360
+      : (currentTransform.rotation - 90 + 360) % 360;
+    setPageTransforms(new Map(pageTransforms).set(currentPage, { ...currentTransform, rotation: newRotation }));
+  };
+
+  const handleZoom = (zoomIn: boolean) => {
+    const currentTransform = getPageTransform(currentPage);
+    const newScale = zoomIn ? currentTransform.scale * 1.2 : currentTransform.scale / 1.2;
+    setPageTransforms(new Map(pageTransforms).set(currentPage, { ...currentTransform, scale: newScale }));
+  };
+
+  if (!target) return null;
 
   return (
     <div 
@@ -204,9 +217,47 @@ const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({ target, onClose }) =>
           >
             Previous
           </button>
-          <span className="text-sm text-gray-300">
-            Page {currentPage} of {target.totalPages}
-          </span>
+          <div className="flex items-center justify-center flex-grow space-x-4">
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => handleZoom(false)}
+                disabled={isRenderingPage}
+                className="p-2 text-sm font-medium text-white bg-blue-600 rounded-full hover:bg-blue-700 disabled:bg-gray-500 disabled:cursor-not-allowed"
+                title="Zoom Out"
+              >
+                <ZoomOutIcon className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => handleZoom(true)}
+                disabled={isRenderingPage}
+                className="p-2 text-sm font-medium text-white bg-blue-600 rounded-full hover:bg-blue-700 disabled:bg-gray-500 disabled:cursor-not-allowed"
+                title="Zoom In"
+              >
+                <ZoomInIcon className="w-5 h-5" />
+              </button>
+            </div>
+            <span className="text-sm text-gray-300 px-2">
+              Page {currentPage} of {target.totalPages}
+            </span>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => handleRotate(false)}
+                disabled={isRenderingPage}
+                className="p-2 text-sm font-medium text-white bg-blue-600 rounded-full hover:bg-blue-700 disabled:bg-gray-500 disabled:cursor-not-allowed"
+                title="Rotate Left"
+              >
+                <RotateLeftIcon className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => handleRotate(true)}
+                disabled={isRenderingPage}
+                className="p-2 text-sm font-medium text-white bg-blue-600 rounded-full hover:bg-blue-700 disabled:bg-gray-500 disabled:cursor-not-allowed"
+                title="Rotate Right"
+              >
+                <RotateIcon className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
           <button
             onClick={goToNextPage}
             disabled={currentPage >= target.totalPages || isRenderingPage}
