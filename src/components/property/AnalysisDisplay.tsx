@@ -63,7 +63,7 @@ const FormattedSummary: React.FC<{ summaryText: string }> = ({ summaryText }) =>
 );
 
 
-const ProcessedDocumentCard: React.FC<{ doc: ProcessedDocument; onShowPdfPage: AnalysisDisplayProps['onShowPdfPage']; isMultiFile: boolean }> = ({ doc, onShowPdfPage, isMultiFile }) => {
+const ProcessedDocumentCard: React.FC<{ doc: ProcessedDocument; onShowPdfPage: AnalysisDisplayProps['onShowPdfPage']; isMultiFile: boolean; titleChainEvent?: TitleChainEvent; }> = ({ doc, onShowPdfPage, isMultiFile, titleChainEvent }) => {
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(false); // Default to collapsed
 
   return (
@@ -121,6 +121,18 @@ const ProcessedDocumentCard: React.FC<{ doc: ProcessedDocument; onShowPdfPage: A
               className="prose prose-sm max-w-none text-gray-300 bg-gray-900 p-4 rounded-md border border-gray-700"
             >
               <FormattedSummary summaryText={doc.summary} />
+              {titleChainEvent && (
+                <div className="mt-4 pt-4 border-t border-gray-700">
+                  <h4 className="text-md font-bold text-blue-300 mb-2">Title Chain / Ownership Sequence</h4>
+                  <div className="space-y-1 text-sm text-gray-300">
+                    <p><strong className="text-gray-200">Event Date:</strong> {formatDate(titleChainEvent.date)}</p>
+                    <p><strong className="text-gray-200">From (Transferor):</strong> {titleChainEvent.transferor}</p>
+                    <p><strong className="text-gray-200">To (Transferee):</strong> {titleChainEvent.transferee}</p>
+                    {titleChainEvent.propertyDescription && <p><strong className="text-gray-200">Property:</strong> {titleChainEvent.propertyDescription}</p>}
+                    <p className="mt-1"><strong className="text-gray-200">Transaction Summary:</strong> {titleChainEvent.summaryOfTransaction}</p>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -258,6 +270,11 @@ const AnalysisDisplay: React.FC<AnalysisDisplayProps> = ({ result, onShowPdfPage
     return result.processedDocuments.find((d: ProcessedDocument) => d.documentId === docId);
   };
 
+  const findTitleChainEventByDocId = (docId: string): TitleChainEvent | undefined => {
+    if (!result.titleChainEvents) return undefined;
+    return result.titleChainEvents.find((e: TitleChainEvent) => e.relatedDocumentId === docId);
+  };
+
   return (
     <div className="space-y-10 mt-8" id="analysis-report-content-inner">
       {result.propertySummary && <PropertySummaryCard summary={result.propertySummary} />}
@@ -298,9 +315,18 @@ const AnalysisDisplay: React.FC<AnalysisDisplayProps> = ({ result, onShowPdfPage
               }
               return a.originalImageIndex - b.originalImageIndex;
             })
-            .map((doc: ProcessedDocument) => (
-              <ProcessedDocumentCard key={doc.documentId} doc={doc} onShowPdfPage={onShowPdfPage} isMultiFile={isMultiFile} />
-          ))}
+            .map((doc: ProcessedDocument) => {
+              const titleChainEvent = findTitleChainEventByDocId(doc.documentId);
+              return (
+                <ProcessedDocumentCard
+                  key={doc.documentId}
+                  doc={doc}
+                  onShowPdfPage={onShowPdfPage}
+                  isMultiFile={isMultiFile}
+                  titleChainEvent={titleChainEvent}
+                />
+              );
+            })}
         </ul>
       </ReportSection>
 

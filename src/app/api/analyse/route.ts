@@ -23,7 +23,7 @@ Your task is to analyze ALL provided images as a single, consolidated set and pe
 3.  For each identified document section:
     a.  Determine its \`documentType\`.
     b.  Specify its \`sourceFileName\` from the list above.
-    c.  Specify its page range within that source file (\`pageRangeInSourceFile\`, e.g., "Pages 1-5").
+    c.  Accurately determine the start and end page for the document section and specify this range in \`pageRangeInSourceFile\` (e.g., "Pages 1-5"). This is critical for linking back to the source.
     d.  Provide a comprehensive \`summary\`. This summary MUST:
         i.  Serve as a detailed explanation, articulating the document's core content, primary purpose, and its overall implications or the "story" it tells.
         ii. If the document describes a sequence of events, transactions, or a legal narrative, narrate this clearly and thoroughly.
