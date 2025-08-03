@@ -103,11 +103,16 @@ Your task is to analyze ALL provided images as a single, consolidated set and pe
     c.  This summary should be placed in a \`propertySummary\` object at the root of the final JSON.
 
 2.  Identify distinct document sections (e.g., Sale Deed, Lease Agreement, Tax Receipt, Legal Notice, Property Title Search Report).
-3.  For each identified document section:
-    a.  Determine its \`documentType\`.
-    b.  Specify its \`sourceFileName\` from the list above.
-    c.  Accurately determine the start and end page for the document section and specify this range in \`pageRangeInSourceFile\` (e.g., "Pages 1-5"). This is critical for linking back to the source.
-    d.  Provide a comprehensive \`summary\`. This summary MUST:
+3.  For each identified document section, you MUST follow this two-step process:
+    **Step 1: Boundary Identification (Highest Priority)**
+    a.  First and most importantly, you must determine the exact starting page of the document. Provide this as \`originalImageIndex\`, which is the 0-based index of the first image in the combined image array where this document section begins.
+    b.  Next, determine the precise page range of this document within its source file. Provide this as \`pageRangeInSourceFile\` (e.g., "Pages 1-5").
+    c.  Accuracy here is critical. Do not proceed to Step 2 until you are confident in these boundaries.
+
+    **Step 2: Content Analysis (Only after Step 1 is complete)**
+    d.  Determine its \`documentType\`.
+    e.  Specify its \`sourceFileName\` from the list above.
+    f.  Provide a comprehensive \`summary\`. This summary MUST:
         i.  Serve as a detailed explanation, articulating the document's core content, primary purpose, and its overall implications or the "story" it tells.
         ii. If the document describes a sequence of events, transactions, or a legal narrative, narrate this clearly and thoroughly.
         iii. Explicitly extract and include all specific, important details:
@@ -118,10 +123,9 @@ Your task is to analyze ALL provided images as a single, consolidated set and pe
         iv. If the document contains structured information (e.g., a schedule of property, list of encumbrances, breakdown of payments, inventory of items, list of heirs), present this information as a **concise markdown table** within the summary to improve clarity. This table should complement the narrative.
         v.  The goal is an understanding so complete that one might not need to read the original document to grasp its essential meaning, narrative, key data, and significance.
         vi. If critical parts of the document are in a language other than English, translate and explain this key information as part of the narrative.
-    e.  Optionally, extract the primary \`date\` of the document (most prominent or effective date) and main \`partiesInvolved\` (e.g., "John Doe (Seller) & Jane Smith (Buyer)").
-    f.  Indicate its \`status\` as 'Processed' if successfully analyzed, or 'Unsupported' if it could not be meaningfully processed. If 'Unsupported', provide a brief \`unsupportedReason\`.
-    g.  Assign a unique \`documentId\` (e.g., "doc_file0_idx0_type").
-    h.  Provide the \`originalImageIndex\`, the 0-based index of the first image *in the combined image array* where this document section begins.
+    g.  Optionally, extract the primary \`date\` of the document (most prominent or effective date) and main \`partiesInvolved\` (e.g., "John Doe (Seller) & Jane Smith (Buyer)").
+    h.  Indicate its \`status\` as 'Processed' if successfully analyzed, or 'Unsupported' if it could not be meaningfully processed. If 'Unsupported', provide a brief \`unsupportedReason\`.
+    i.  Assign a unique \`documentId\` (e.g., "doc_file0_idx0_type").
 
 4.  Construct a "Title Chain / Ownership Sequence" by identifying documents that represent transfers of ownership (e.g., Sale Deed, Gift Deed, Mortgage Deed, Release Deed, Inheritance documents, Court Orders affecting title).
     For each such event, extract:
