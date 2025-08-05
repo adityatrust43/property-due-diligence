@@ -1,0 +1,23 @@
+{
+    "LambdaFunctionConfigurations": [
+        {
+            "Id": "test-document-analysis-trigger",
+            "LambdaFunctionArn": "arn:aws:lambda:us-east-1:530349877694:function:test-lambda-function",
+            "Events": ["s3:ObjectCreated:*"],
+            "Filter": {
+                "Key": {
+                    "FilterRules": [
+                        {
+                            "Name": "prefix",
+                            "Value": "uploads/"
+                        },
+                        {
+                            "Name": "suffix",
+                            "Value": ".pdf"
+                        }
+                    ]
+                }
+            }
+        }
+    ]
+}

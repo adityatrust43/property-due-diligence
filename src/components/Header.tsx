@@ -1,8 +1,7 @@
 'use client';
 
 import { useAuth } from '../hooks/useAuth';
-import { getAuth, signOut } from 'firebase/auth';
-import { app } from '../lib/firebase';
+import { signOut } from 'aws-amplify/auth';
 import { useRouter } from 'next/navigation';
 import {
   DropdownMenu,
@@ -15,12 +14,11 @@ import {
 
 export default function Header() {
   const { user } = useAuth();
-  const auth = getAuth(app);
   const router = useRouter();
 
   const handleLogout = async () => {
     try {
-      await signOut(auth);
+      await signOut();
       router.push('/login');
     } catch (error) {
       console.error("Error signing out:", error);
@@ -35,13 +33,13 @@ export default function Header() {
           <DropdownMenu>
             <DropdownMenuTrigger>
               <img
-                src={user.photoURL || `https://ui-avatars.com/api/?name=${user.email}`}
+                src={user.attributes?.picture || `https://ui-avatars.com/api/?name=${user.attributes?.email}`}
                 alt="User profile"
                 className="w-10 h-10 rounded-full cursor-pointer"
               />
             </DropdownMenuTrigger>
             <DropdownMenuContent>
-              <DropdownMenuLabel>{user.email}</DropdownMenuLabel>
+              <DropdownMenuLabel>{user.attributes?.email}</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
                 Logout

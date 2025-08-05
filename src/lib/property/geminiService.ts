@@ -30,7 +30,7 @@ const fileToTypedArray = async (file: File): Promise<Uint8Array> => {
   return new Uint8Array(await file.arrayBuffer());
 };
 
-const convertSinglePdfToImageParts = async (
+export const convertSinglePdfToImageParts = async (
     file: File,
     onProgress: (progress: { processed: number; total: number; fileName: string }) => void
 ): Promise<{imageParts: GeminiContentPart[], totalPages: number, fileName: string}> => {

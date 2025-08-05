@@ -1,24 +1,24 @@
 'use client';
 
-import { useAuth } from '../hooks/useAuth';
+import { useSimpleAuth } from '../hooks/useSimpleAuth';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import LoadingSpinner from './property/LoadingSpinner';
 
-const withAuth = <P extends object>(
+const withSimpleAuth = <P extends object>(
   WrappedComponent: React.ComponentType<P>
 ): React.FC<P> => {
   const WithAuthComponent: React.FC<P> = (props) => {
-    const { user, loading } = useAuth();
+    const { isLoggedIn, loading } = useSimpleAuth();
     const router = useRouter();
 
     useEffect(() => {
-      if (!loading && !user) {
+      if (!loading && !isLoggedIn) {
         router.replace('/login');
       }
-    }, [user, loading, router]);
+    }, [isLoggedIn, loading, router]);
 
-    if (loading || !user) {
+    if (loading || !isLoggedIn) {
       return (
         <div className="flex items-center justify-center h-screen">
           <LoadingSpinner />
@@ -32,4 +32,4 @@ const withAuth = <P extends object>(
   return WithAuthComponent;
 };
 
-export default withAuth;
+export default withSimpleAuth;

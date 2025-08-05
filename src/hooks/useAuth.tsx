@@ -1,35 +1,50 @@
 'use client';
 
-import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
-import { getAuth, onAuthStateChanged, User } from 'firebase/auth';
-import { app } from '../lib/firebase';
+import { useState, useEffect } from 'react';
+import { Hub } from 'aws-amplify/utils';
+import { getCurrentUser, AuthUser, fetchUserAttributes } from 'aws-amplify/auth';
 
-interface AuthContextType {
-  user: User | null;
-  loading: boolean;
+interface CustomAuthUser extends AuthUser {
+  attributes?: {
+    [key: string]: string | undefined;
+  };
 }
 
-const AuthContext = createContext<AuthContextType>({ user: null, loading: true });
-
-export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
+export function useAuth() {
+  const [user, setUser] = useState<CustomAuthUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const auth = getAuth(app);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
+    const checkUser = async () => {
+      setLoading(true);
+      try {
+        const currentUser = await getCurrentUser();
+        const attributes = await fetchUserAttributes();
+        setUser({ ...currentUser, attributes });
+      } catch (error) {
+        setUser(null);
+      }
       setLoading(false);
+    };
+
+    checkUser();
+
+    const hubListener = Hub.listen('auth', ({ payload }) => {
+      switch (payload.event) {
+        case 'signedIn':
+        case 'tokenRefresh':
+          checkUser();
+          break;
+        case 'signedOut':
+          setUser(null);
+          break;
+      }
     });
 
-    return () => unsubscribe();
-  }, [auth]);
+    return () => {
+      hubListener();
+    };
+  }, []);
 
-  return (
-    <AuthContext.Provider value={{ user, loading }}>
-      {children}
-    </AuthContext.Provider>
-  );
-};
-
-export const useAuth = () => useContext(AuthContext);
+  return { user, loading };
+}

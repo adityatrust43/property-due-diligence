@@ -43,3 +43,15 @@ next-env.d.ts
 # firebase
 firebase-debug.log
 firestore-debug.log
+
+# Lambda dependencies
+lambda/node_modules
+lambda_v2/node_modules
+test_lambda/node_modules
+
+# Session Context
+session_context.md
+
+NUL
+
+old_implementation/*

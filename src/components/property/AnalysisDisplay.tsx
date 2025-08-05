@@ -254,19 +254,25 @@ const PropertySummaryCard: React.FC<{ summary: PropertySummary }> = ({ summary }
 const AnalysisDisplay: React.FC<AnalysisDisplayProps> = ({ result, onShowPdfPage }) => {
   const isMultiFile = result.inputFiles && result.inputFiles.length > 1;
 
+  // Defensive coding: ensure all expected arrays exist, even if empty.
+  const processedDocuments = result.processedDocuments || [];
+  const titleChainEvents = result.titleChainEvents || [];
+  const redFlags = result.redFlags || [];
+  const unsupportedPages = result.unsupportedPages || [];
+
   const findDocumentById = (docId: string): ProcessedDocument | undefined => {
-    return result.processedDocuments.find((d: ProcessedDocument) => d.documentId === docId);
+    return processedDocuments.find((d: ProcessedDocument) => d.documentId === docId);
   };
 
   return (
     <div className="space-y-10 mt-8" id="analysis-report-content-inner">
       {result.propertySummary && <PropertySummaryCard summary={result.propertySummary} />}
 
-      {result.titleChainEvents && result.titleChainEvents.length > 0 && (
+      {titleChainEvents.length > 0 && (
         <ReportSection title="Title Chain / Ownership Sequence" icon={<LinkIcon className="w-7 h-7" />}>
           <div className="space-y-6 relative pl-3">
             <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-blue-700 ml-[0.3rem]"></div>
-            {result.titleChainEvents
+            {titleChainEvents
               .sort((a: TitleChainEvent, b: TitleChainEvent) => a.order - b.order)
               .map((event: TitleChainEvent) => (
                 <TitleChainEventCard
@@ -281,11 +287,11 @@ const AnalysisDisplay: React.FC<AnalysisDisplayProps> = ({ result, onShowPdfPage
       )}
 
       <ReportSection title="Indexed Documents & Detailed Explanations" icon={<ListChecksIcon className="w-7 h-7" />}>
-        {result.processedDocuments.length === 0 && (
+        {processedDocuments.length === 0 && (
           <p className="text-gray-400">No distinct documents were identified or explained from the provided file(s).</p>
         )}
         <ul className="space-y-4">
-          {result.processedDocuments
+          {processedDocuments
             .sort((a: ProcessedDocument, b: ProcessedDocument) => {
               if (a.date && b.date) {
                 return new Date(a.date).getTime() - new Date(b.date).getTime();
@@ -304,13 +310,13 @@ const AnalysisDisplay: React.FC<AnalysisDisplayProps> = ({ result, onShowPdfPage
         </ul>
       </ReportSection>
 
-      {result.redFlags && result.redFlags.length > 0 && (
+      {redFlags.length > 0 && (
         <ReportSection title="Potential Red Flags & Suggestions" icon={<AlertTriangleIcon className="w-7 h-7 text-red-400" />}>
            <p className="mb-4 text-sm text-gray-400">
             The AI has identified the following potential areas of concern or items requiring further attention. These are based on common due diligence criteria and the information present in the documents.
           </p>
           <ul className="space-y-4">
-            {result.redFlags.map((flag: RedFlagItem) => (
+            {redFlags.map((flag: RedFlagItem) => (
               <RedFlagCard
                 key={flag.redFlagId}
                 flag={flag}
@@ -323,20 +329,20 @@ const AnalysisDisplay: React.FC<AnalysisDisplayProps> = ({ result, onShowPdfPage
         </ReportSection>
       )}
 
-      {result.redFlags && result.redFlags.length === 0 && (
+      {redFlags.length === 0 && (
          <ReportSection title="Potential Red Flags & Suggestions" icon={<CheckCircleIcon className="w-7 h-7 text-green-400" />}>
             <p className="text-gray-400">No significant red flags were automatically identified by the AI based on the provided documents. However, always conduct a thorough manual review.</p>
         </ReportSection>
       )}
 
 
-      {result.unsupportedPages.length > 0 && (
+      {unsupportedPages.length > 0 && (
         <ReportSection title="Unprocessed Pages" icon={<QuestionMarkCircleIcon className="w-7 h-7" />}>
           <p className="mb-3 text-sm text-gray-400">
             Some pages could not be processed or were not part of an identifiable document:
           </p>
           <ul className="list-disc list-inside space-y-2 pl-2">
-            {result.unsupportedPages.map((page: UnsupportedPage, index: number) => (
+            {unsupportedPages.map((page: UnsupportedPage, index: number) => (
               <li key={`${page.sourceFileName}-${page.pageNumberInSourceFile}-${index}`} className="text-sm text-gray-300">
                 {isMultiFile && page.sourceFileName ? `${page.sourceFileName}, ` : ''}
                 Page {page.pageNumberInSourceFile}: <span className="text-yellow-400">{page.reason}</span>

@@ -1,10 +1,11 @@
 import type {Metadata} from 'next';
 import './globals.css';
 import { Toaster } from "../components/ui/toaster";
-import { AuthProvider } from '../hooks/useAuth';
+import AmplifyProvider from '../components/AmplifyProvider';
+import ConfigureAmplifyClientSide from '../components/ConfigureAmplify';
 
 export const metadata: Metadata = {
-  title: 'Gemini Chat UI',
+  title: 'Property Diligence AI',
   description: 'A chat interface for Google Gemini API.',
 };
 
@@ -21,9 +22,10 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=Inter&display=swap" rel="stylesheet" />
       </head>
       <body className="font-body antialiased">
-        <AuthProvider>
+        <AmplifyProvider>
+          <ConfigureAmplifyClientSide />
           {children}
-        </AuthProvider>
+        </AmplifyProvider>
         <Toaster />
       </body>
     </html>

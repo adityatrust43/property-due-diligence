@@ -1,0 +1,10 @@
+{
+  "name": "test-lambda",
+  "version": "1.0.0",
+  "description": "Lambda function to generate a mock analysis report for testing.",
+  "main": "index.js",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.609.0",
+    "@google/generative-ai": "^0.24.1"
+  }
+}

@@ -1,60 +1,111 @@
+'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { UploadIcon, FilePdfIcon } from './icons';
 
 interface FileUploadProps {
-  onFilesSelect: (files: File[]) => void; // Changed from onFileSelect
+  onUploadSuccess: (key: string) => void;
   disabled?: boolean;
 }
 
-const FileUpload: React.FC<FileUploadProps> = ({ onFilesSelect, disabled }) => {
-  const [fileNames, setFileNames] = useState<string[]>([]); // Changed from fileName
+const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess, disabled }) => {
+  const [fileNames, setFileNames] = useState<string[]>([]);
+  const [uploadProgress, setUploadProgress] = useState<Record<string, { processed: number; total: number; message: string }>>({});
+  const [pdfjsLib, setPdfjsLib] = useState<any>(null);
+
+  useEffect(() => {
+    // Dynamically import and configure pdfjs-dist
+    import('pdfjs-dist/build/pdf.mjs').then(pdfjs => {
+      // Dynamically import the worker entry point
+      import('pdfjs-dist/build/pdf.worker.mjs');
+      pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+      setPdfjsLib(pdfjs);
+    });
+  }, []);
+
+  const handleFiles = useCallback(async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    const validPDFFiles = Array.from(files).filter(f => f.type === "application/pdf");
+    if (validPDFFiles.length === 0) {
+      alert("Please select PDF file(s).");
+      return;
+    }
+
+    setFileNames(validPDFFiles.map(f => f.name));
+    setUploadProgress({});
+
+    for (const file of validPDFFiles) {
+      try {
+        setUploadProgress(prev => ({ ...prev, [file.name]: { processed: 0, total: 0, message: 'Loading PDF...' } }));
+
+        const fileBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: fileBuffer }).promise;
+        const numPages = pdf.numPages;
+        const images: Blob[] = [];
+
+        setUploadProgress(prev => ({ ...prev, [file.name]: { processed: 0, total: numPages, message: `Converting page 1 of ${numPages}...` } }));
+
+        for (let i = 1; i <= numPages; i++) {
+          setUploadProgress(prev => ({ ...prev, [file.name]: { processed: i, total: numPages, message: `Converting page ${i} of ${numPages}...` } }));
+          const page = await pdf.getPage(i);
+          const viewport = page.getViewport({ scale: 1.5 });
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+          canvas.height = viewport.height;
+          canvas.width = viewport.width;
+
+          if (!context) {
+            throw new Error('Could not get canvas context');
+          }
+
+          await page.render({ canvasContext: context, viewport: viewport }).promise;
+          const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+          images.push(blob as Blob);
+        }
+
+        setUploadProgress(prev => ({ ...prev, [file.name]: { processed: numPages, total: numPages, message: 'Uploading...' } }));
+
+        const formData = new FormData();
+        formData.append('file', file);
+        images.forEach((image, index) => {
+          formData.append('images', image, `page_${index + 1}.png`);
+        });
+
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          throw new Error('Upload failed');
+        }
+
+        const { key } = await response.json();
+
+        setUploadProgress(prev => ({ ...prev, [file.name]: { processed: numPages, total: numPages, message: 'Complete' } }));
+        console.log(`Successfully uploaded ${file.name}. S3 Key: ${key}`);
+        onUploadSuccess(key);
+      } catch (error) {
+        console.error(`Error uploading ${file.name}:`, error);
+        alert(`Error uploading ${file.name}. Please try again.`);
+        setUploadProgress(prev => ({ ...prev, [file.name]: { processed: 0, total: 0, message: 'Error' } }));
+      }
+    }
+  }, [onUploadSuccess, pdfjsLib]);
 
   const handleFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (files && files.length > 0) {
-      const validPDFFiles = Array.from(files).filter(f => f.type === "application/pdf");
-      if (validPDFFiles.length > 0) {
-        setFileNames(validPDFFiles.map(f => f.name));
-        onFilesSelect(validPDFFiles);
-      } else {
-        setFileNames([]);
-        onFilesSelect([]); // Notify parent of no valid files
-        alert("Please select PDF file(s). No valid PDFs found in selection.");
-      }
-    } else {
-      setFileNames([]);
-      onFilesSelect([]);
-    }
-  }, [onFilesSelect]);
+    handleFiles(event.target.files);
+  }, [handleFiles]);
 
   const handleDrop = useCallback((event: React.DragEvent<HTMLLabelElement>) => {
     event.preventDefault();
     event.stopPropagation();
     if (disabled) return;
-    const files = event.dataTransfer.files;
-    if (files && files.length > 0) {
-      const validPDFFiles = Array.from(files).filter(f => f.type === "application/pdf");
-       if (validPDFFiles.length > 0) {
-        setFileNames(validPDFFiles.map(f => f.name));
-        onFilesSelect(validPDFFiles);
-      } else {
-        setFileNames([]);
-        onFilesSelect([]);
-        alert("Please drop PDF file(s). No valid PDFs found in dropped items.");
-      }
-    } else {
-      setFileNames([]);
-      onFilesSelect([]);
-    }
-  }, [onFilesSelect, disabled]);
+    handleFiles(event.dataTransfer.files);
+  }, [disabled, handleFiles]);
 
   const handleDragOver = (event: React.DragEvent<HTMLLabelElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-  };
-  
-  const handleDragEnter = (event: React.DragEvent<HTMLLabelElement>) => {
     event.preventDefault();
     event.stopPropagation();
   };
@@ -65,7 +116,6 @@ const FileUpload: React.FC<FileUploadProps> = ({ onFilesSelect, disabled }) => {
         htmlFor="pdf-upload"
         onDrop={handleDrop}
         onDragOver={handleDragOver}
-        onDragEnter={handleDragEnter}
         className={`flex flex-col items-center justify-center w-full h-auto min-h-[16rem] border-2 border-dashed rounded-lg cursor-pointer transition-colors p-4
                     ${disabled ? 'bg-gray-700 border-gray-600 cursor-not-allowed' : 'bg-gray-700 hover:bg-gray-600 border-gray-500 hover:border-blue-500'}`}
       >
@@ -74,20 +124,34 @@ const FileUpload: React.FC<FileUploadProps> = ({ onFilesSelect, disabled }) => {
             <>
               <FilePdfIcon className="w-10 h-10 mb-3 text-blue-500" />
               <p className="mb-1 text-sm text-gray-300">
-                <span className="font-semibold">{fileNames.length} PDF file(s) selected</span>
+                <span className="font-semibold">Uploading {fileNames.length} PDF file(s)</span>
               </p>
               <ul className="text-xs text-gray-400 list-none max-h-28 overflow-y-auto px-2 space-y-1">
-                {fileNames.map(name => <li key={name} className="truncate" title={name}>{name}</li>)}
+                {fileNames.map(name => {
+                  const progress = uploadProgress[name];
+                  if (progress && progress.message === 'Complete') {
+                    return (
+                      <li key={name} className="truncate" title={name}>
+                        {name} - Complete
+                      </li>
+                    );
+                  }
+                  const progressText = progress ? `${progress.message}` : 'Waiting...';
+                  return (
+                    <li key={name} className="truncate" title={name}>
+                      {name} - {progress ? progressText : 'Waiting...'}
+                    </li>
+                  );
+                })}
               </ul>
-              <p className="mt-2 text-xs text-gray-400">Click to change or drag and drop other PDF(s)</p>
             </>
           ) : (
             <>
               <UploadIcon className="w-10 h-10 mb-3 text-gray-500" />
-              <p className="mb-2 text-sm text-gray-400">
+              <p className="mb-2 text-gray-400">
                 <span className="font-semibold">Click to upload</span> or drag and drop
               </p>
-              <p className="text-xs text-gray-500">PDF documents only (max 50MB per file)</p>
+              <p className="text-xs text-gray-500">PDF documents only</p>
             </>
           )}
         </div>
@@ -96,7 +160,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onFilesSelect, disabled }) => {
           type="file"
           className="hidden"
           accept=".pdf"
-          multiple // Allow multiple files
+          multiple
           onChange={handleFileChange}
           disabled={disabled}
         />

@@ -1,115 +1,66 @@
 'use client';
 
 import { useState } from 'react';
-import { getAuth, signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
-import { app } from '../../lib/firebase';
 import { useRouter } from 'next/navigation';
+import { useSimpleAuth } from '../../hooks/useSimpleAuth';
 
 export default function LoginPage() {
-  const [isLogin, setIsLogin] = useState(true);
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-  const auth = getAuth(app);
+  const [error, setError] = useState('');
   const router = useRouter();
+  const { login } = useSimpleAuth();
 
-  const handleGoogleSignIn = async () => {
-    const provider = new GoogleAuthProvider();
-    try {
-      await signInWithPopup(auth, provider);
-      router.push('/analyse');
-    } catch (error: any) {
-      setError(error.message);
-    }
-  };
-
-  const handlePasswordReset = async () => {
-    if (!email) {
-      setError("Please enter your email address to reset your password.");
-      return;
-    }
-    try {
-      await sendPasswordResetEmail(auth, email);
-      setMessage("Password reset email sent. Please check your inbox.");
-      setError(null);
-    } catch (error: any) {
-      setError(error.message);
-    }
-  };
-
-  const handleEmailAuth = async (e: React.FormEvent) => {
+  const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      if (isLogin) {
-        await signInWithEmailAndPassword(auth, email, password);
-      } else {
-        await createUserWithEmailAndPassword(auth, email, password);
-      }
+    if (username === 'admin' && password === 'password') {
+      login();
       router.push('/analyse');
-    } catch (error: any) {
-      setError(error.message);
+    } else {
+      setError('Invalid username or password');
     }
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white">
-      <div className="w-full max-w-md p-8 space-y-8 bg-gray-800 rounded-lg shadow-lg">
-        <h1 className="text-3xl font-bold text-center">{isLogin ? 'Login' : 'Sign Up'}</h1>
-        {error && <p className="text-red-500 text-center">{error}</p>}
-        {message && <p className="text-green-500 text-center">{message}</p>}
-        <form onSubmit={handleEmailAuth} className="space-y-6">
-          <div>
-            <label className="block text-sm font-medium">Email</label>
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900">
+      <div className="w-full max-w-xs">
+        <form onSubmit={handleLogin} className="bg-gray-800 shadow-md rounded px-8 pt-6 pb-8 mb-4">
+          <div className="mb-4">
+            <label className="block text-gray-300 text-sm font-bold mb-2" htmlFor="username">
+              Username
+            </label>
             <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-3 py-2 mt-1 text-white bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+              id="username"
+              type="text"
+              placeholder="Username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
             />
           </div>
-          <div>
-            <label className="block text-sm font-medium">Password</label>
+          <div className="mb-6">
+            <label className="block text-gray-300 text-sm font-bold mb-2" htmlFor="password">
+              Password
+            </label>
             <input
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 mb-3 leading-tight focus:outline-none focus:shadow-outline"
+              id="password"
               type="password"
+              placeholder="******************"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2 mt-1 text-white bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
             />
           </div>
-          <button
-            type="submit"
-            className="w-full py-3 font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-          >
-            {isLogin ? 'Login' : 'Sign Up'}
-          </button>
-        </form>
-        <div className="flex items-center justify-between">
-          <button onClick={() => setIsLogin(!isLogin)} className="text-sm text-blue-400 hover:underline">
-            {isLogin ? 'Need an account? Sign Up' : 'Already have an account? Login'}
-          </button>
-          {isLogin && (
-            <button onClick={handlePasswordReset} className="text-sm text-blue-400 hover:underline">
-              Forgot Password?
+          {error && <p className="text-red-500 text-xs italic">{error}</p>}
+          <div className="flex items-center justify-between">
+            <button
+              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+              type="submit"
+            >
+              Sign In
             </button>
-          )}
-        </div>
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-gray-600" />
           </div>
-          <div className="relative flex justify-center text-sm">
-            <span className="px-2 text-gray-400 bg-gray-800">Or</span>
-          </div>
-        </div>
-        <button
-          onClick={handleGoogleSignIn}
-          className="w-full py-3 font-semibold text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-        >
-          Sign in with Google
-        </button>
+        </form>
       </div>
     </div>
   );

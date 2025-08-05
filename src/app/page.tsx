@@ -1,22 +1,22 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '../hooks/useAuth';
 
 export default function LandingPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isOAuthRedirect = searchParams.has('code');
 
   useEffect(() => {
-    if (!loading) {
-      if (user) {
-        router.push('/analyse');
-      } else {
-        router.push('/login');
-      }
+    if (user) {
+      router.push('/analyse');
+    } else if (!loading && !isOAuthRedirect) {
+      router.push('/login');
     }
-  }, [user, loading, router]);
+  }, [user, loading, router, isOAuthRedirect]);
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white">
