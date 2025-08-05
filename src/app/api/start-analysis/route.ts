@@ -2,13 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { LambdaClient, InvokeCommand, InvocationType } from '@aws-sdk/client-lambda';
 import { randomUUID } from 'crypto';
 
-const lambdaClient = new LambdaClient({
-    region: process.env.NEXT_PUBLIC_AWS_REGION,
-    credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+let lambdaClient: LambdaClient | null = null;
+
+function getLambdaClient() {
+    if (!lambdaClient) {
+        lambdaClient = new LambdaClient({
+            region: process.env.NEXT_PUBLIC_AWS_REGION,
+            credentials: {
+                accessKeyId: process.env.MY_AWS_ACCESS_KEY_ID!,
+                secretAccessKey: process.env.MY_AWS_SECRET_ACCESS_KEY!,
+            }
+        });
     }
-});
+    return lambdaClient;
+}
 
 const FUNCTION_NAME = 'document-analysis-function-v2';
 
@@ -31,8 +38,9 @@ export async function POST(req: NextRequest) {
             Payload: JSON.stringify(payload),
         };
 
+        const client = getLambdaClient();
         const command = new InvokeCommand(invokeParams);
-        const result = await lambdaClient.send(command);
+        const result = await client.send(command);
 
         console.log("Lambda invocation result:", result);
 

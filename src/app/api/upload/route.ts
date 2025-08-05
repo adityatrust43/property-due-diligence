@@ -4,34 +4,20 @@ import { PutObjectCommand } from '@aws-sdk/client-s3';
 
 export async function POST(req: NextRequest) {
   const formData = await req.formData();
-  const file = formData.get('file') as File;
+  const key = formData.get('key') as string;
   const images = formData.getAll('images') as File[];
 
-  if (!file || !images || images.length === 0) {
-    return NextResponse.json({ error: 'Missing file or images' }, { status: 400 });
+  if (!key || !images || images.length === 0) {
+    return NextResponse.json({ error: 'Missing key or images' }, { status: 400 });
   }
-
-  const filename = file.name;
-  const fileKey = `uploads/admin/${filename}/${filename}`;
 
   try {
     const s3Client = getS3Client();
-    // Convert file and images to buffers
-    const pdfBuffer = Buffer.from(await file.arrayBuffer());
     const imageBuffers = await Promise.all(images.map(async (image) => Buffer.from(await image.arrayBuffer())));
-
-    // Upload the original PDF
-    const pdfUploadCommand = new PutObjectCommand({
-      Bucket: UPLOADS_BUCKET_NAME,
-      Key: fileKey,
-      Body: pdfBuffer,
-      ContentType: 'application/pdf',
-    });
-    await s3Client.send(pdfUploadCommand);
 
     // Upload each image to S3
     const imageUploadPromises = imageBuffers.map((buffer, index) => {
-      const imageKey = `uploads/admin/${filename}/images/page_${index + 1}.png`;
+      const imageKey = `${key}/images/page_${index + 1}.png`;
       const imageUploadCommand = new PutObjectCommand({
         Bucket: UPLOADS_BUCKET_NAME,
         Key: imageKey,
@@ -43,9 +29,9 @@ export async function POST(req: NextRequest) {
 
     await Promise.all(imageUploadPromises);
 
-    return NextResponse.json({ message: 'File and images uploaded successfully', key: `uploads/admin/${filename}` });
+    return NextResponse.json({ message: 'Images uploaded successfully', key });
   } catch (error) {
-    console.error('Error processing file upload:', error);
-    return NextResponse.json({ error: 'Error processing file upload' }, { status: 500 });
+    console.error('Error processing image upload:', error);
+    return NextResponse.json({ error: 'Error processing image upload' }, { status: 500 });
   }
 }

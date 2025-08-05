@@ -64,24 +64,49 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess, disabled }) =>
           images.push(blob as Blob);
         }
 
-        setUploadProgress(prev => ({ ...prev, [file.name]: { processed: numPages, total: numPages, message: 'Uploading...' } }));
+        setUploadProgress(prev => ({ ...prev, [file.name]: { processed: numPages, total: numPages, message: 'Getting upload URL...' } }));
 
+        // Get presigned URL for the PDF
+        const presignedUrlResponse = await fetch('/api/get-presigned-url', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fileName: file.name, fileType: file.type }),
+        });
+
+        if (!presignedUrlResponse.ok) {
+            throw new Error('Failed to get presigned URL');
+        }
+
+        const { signedUrl, key } = await presignedUrlResponse.json();
+
+        // Upload the PDF directly to S3
+        setUploadProgress(prev => ({ ...prev, [file.name]: { processed: numPages, total: numPages, message: 'Uploading PDF...' } }));
+        const pdfUploadResponse = await fetch(signedUrl, {
+            method: 'PUT',
+            body: file,
+            headers: { 'Content-Type': file.type },
+        });
+
+        if (!pdfUploadResponse.ok) {
+            throw new Error('PDF upload to S3 failed');
+        }
+
+        // Upload the images to our server
+        setUploadProgress(prev => ({ ...prev, [file.name]: { processed: numPages, total: numPages, message: 'Uploading images...' } }));
         const formData = new FormData();
-        formData.append('file', file);
+        formData.append('key', key);
         images.forEach((image, index) => {
           formData.append('images', image, `page_${index + 1}.png`);
         });
 
-        const response = await fetch('/api/upload', {
+        const imageUploadResponse = await fetch('/api/upload', {
           method: 'POST',
           body: formData,
         });
 
-        if (!response.ok) {
-          throw new Error('Upload failed');
+        if (!imageUploadResponse.ok) {
+          throw new Error('Image upload failed');
         }
-
-        const { key } = await response.json();
 
         setUploadProgress(prev => ({ ...prev, [file.name]: { processed: numPages, total: numPages, message: 'Complete' } }));
         console.log(`Successfully uploaded ${file.name}. S3 Key: ${key}`);
