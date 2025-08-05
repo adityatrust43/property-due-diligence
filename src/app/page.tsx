@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '../hooks/useAuth';
 
-export default function LandingPage() {
+function LandingPageContent() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -23,5 +23,13 @@ export default function LandingPage() {
       <h1 className="text-5xl font-bold mb-4">Property Document Analyzer</h1>
       <p className="text-lg mb-8">Loading...</p>
     </div>
+  );
+}
+
+export default function LandingPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <LandingPageContent />
+    </Suspense>
   );
 }

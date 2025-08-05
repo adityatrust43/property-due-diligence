@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { s3Client, UPLOADS_BUCKET_NAME } from '../../../lib/aws-s3';
+import { getS3Client, UPLOADS_BUCKET_NAME } from '../../../lib/aws-s3';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 
 export async function POST(req: NextRequest) {
@@ -15,6 +15,7 @@ export async function POST(req: NextRequest) {
   const fileKey = `uploads/admin/${filename}/${filename}`;
 
   try {
+    const s3Client = getS3Client();
     // Convert file and images to buffers
     const pdfBuffer = Buffer.from(await file.arrayBuffer());
     const imageBuffers = await Promise.all(images.map(async (image) => Buffer.from(await image.arrayBuffer())));

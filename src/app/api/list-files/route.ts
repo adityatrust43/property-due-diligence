@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { s3Client, UPLOADS_BUCKET_NAME } from '../../../lib/aws-s3';
+import { getS3Client, UPLOADS_BUCKET_NAME } from '../../../lib/aws-s3';
 import { ListObjectsV2Command } from '@aws-sdk/client-s3';
 
 export async function POST(req: NextRequest) {
     try {
+        const s3Client = getS3Client();
         const { userId = 'admin' } = await req.json();
         
         const listObjectsParams = {

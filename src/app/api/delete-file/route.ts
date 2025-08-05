@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { s3Client, UPLOADS_BUCKET_NAME } from '../../../lib/aws-s3';
+import { getS3Client, UPLOADS_BUCKET_NAME } from '../../../lib/aws-s3';
 import { DeleteObjectsCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 
 export async function POST(req: NextRequest) {
     try {
+        const s3Client = getS3Client();
         const { key } = await req.json();
         if (!key) {
             return NextResponse.json({ error: 'Missing key parameter' }, { status: 400 });
