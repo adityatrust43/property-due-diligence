@@ -1,13 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { S3Client, GetObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 
-const s3Client = new S3Client({
-    region: process.env.NEXT_PUBLIC_AWS_REGION,
-    credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+let s3Client: S3Client | null = null;
+
+function getS3Client() {
+    if (!s3Client) {
+        s3Client = new S3Client({
+            region: process.env.NEXT_PUBLIC_AWS_REGION,
+            credentials: {
+                accessKeyId: process.env.MY_AWS_ACCESS_KEY_ID!,
+                secretAccessKey: process.env.MY_AWS_SECRET_ACCESS_KEY!,
+            }
+        });
     }
-});
+    return s3Client;
+}
 
 const REPORTS_BUCKET = process.env.NEXT_PUBLIC_S3_REPORTS_BUCKET!;
 
@@ -25,7 +32,8 @@ export async function POST(req: NextRequest) {
             Key: reportKey,
         };
 
-        const { Body } = await s3Client.send(new GetObjectCommand(getObjectParams));
+        const client = getS3Client();
+        const { Body } = await client.send(new GetObjectCommand(getObjectParams));
         const reportContent = await streamToString(Body);
 
         return NextResponse.json({ status: 'COMPLETE', report: JSON.parse(reportContent) });

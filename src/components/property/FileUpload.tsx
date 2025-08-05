@@ -66,22 +66,26 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess, disabled }) =>
 
         setUploadProgress(prev => ({ ...prev, [file.name]: { processed: numPages, total: numPages, message: 'Getting upload URL...' } }));
 
-        // Get presigned URL for the PDF
+        // Get presigned URLs for the PDF and images
         const presignedUrlResponse = await fetch('/api/get-presigned-url', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fileName: file.name, fileType: file.type }),
+            body: JSON.stringify({
+                fileName: file.name,
+                fileType: file.type,
+                imageCount: images.length
+            }),
         });
 
         if (!presignedUrlResponse.ok) {
-            throw new Error('Failed to get presigned URL');
+            throw new Error('Failed to get presigned URLs');
         }
 
-        const { signedUrl, key } = await presignedUrlResponse.json();
+        const { pdfSignedUrl, imageSignedUrls, key } = await presignedUrlResponse.json();
 
         // Upload the PDF directly to S3
-        setUploadProgress(prev => ({ ...prev, [file.name]: { processed: numPages, total: numPages, message: 'Uploading PDF...' } }));
-        const pdfUploadResponse = await fetch(signedUrl, {
+        setUploadProgress(prev => ({ ...prev, [file.name]: { processed: 0, total: images.length + 1, message: 'Uploading PDF...' } }));
+        const pdfUploadResponse = await fetch(pdfSignedUrl, {
             method: 'PUT',
             body: file,
             headers: { 'Content-Type': file.type },
@@ -91,21 +95,18 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess, disabled }) =>
             throw new Error('PDF upload to S3 failed');
         }
 
-        // Upload the images to our server
-        setUploadProgress(prev => ({ ...prev, [file.name]: { processed: numPages, total: numPages, message: 'Uploading images...' } }));
-        const formData = new FormData();
-        formData.append('key', key);
-        images.forEach((image, index) => {
-          formData.append('images', image, `page_${index + 1}.png`);
-        });
+        // Upload the images directly to S3
+        for (let i = 0; i < images.length; i++) {
+            setUploadProgress(prev => ({ ...prev, [file.name]: { processed: i + 1, total: images.length + 1, message: `Uploading image ${i + 1} of ${images.length}...` } }));
+            const imageUploadResponse = await fetch(imageSignedUrls[i], {
+                method: 'PUT',
+                body: images[i],
+                headers: { 'Content-Type': 'image/png' },
+            });
 
-        const imageUploadResponse = await fetch('/api/upload', {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (!imageUploadResponse.ok) {
-          throw new Error('Image upload failed');
+            if (!imageUploadResponse.ok) {
+                throw new Error(`Image ${i + 1} upload to S3 failed`);
+            }
         }
 
         setUploadProgress(prev => ({ ...prev, [file.name]: { processed: numPages, total: numPages, message: 'Complete' } }));
