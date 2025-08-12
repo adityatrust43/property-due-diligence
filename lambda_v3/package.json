@@ -1,0 +1,11 @@
+{
+  "name": "document-analysis-lambda-v2",
+  "version": "1.0.0",
+  "description": "A parallelized Lambda function to analyze property documents using image-based analysis.",
+  "main": "index.js",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.609.0",
+    "@aws-sdk/s3-request-presigner": "^3.859.0",
+    "@google/generative-ai": "^0.15.0"
+  }
+}

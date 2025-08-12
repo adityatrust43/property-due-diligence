@@ -123,7 +123,7 @@ exports.handler = async (event) => {
         const allImageParts = await getImagesFromS3(UPLOADS_BUCKET, s3Key);
         console.log(`Successfully fetched ${allImageParts.length} images.`);
 
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
         const finalCombinedResult = {};
 
         console.log("Starting sequential, batched analysis of tasks...");

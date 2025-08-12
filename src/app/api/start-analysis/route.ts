@@ -17,7 +17,7 @@ function getLambdaClient() {
     return lambdaClient;
 }
 
-const FUNCTION_NAME = 'document-analysis-function-v2';
+const FUNCTION_NAME = 'document-analysis-function-v3';
 
 export async function POST(req: NextRequest) {
     try {
@@ -29,7 +29,9 @@ export async function POST(req: NextRequest) {
         const fileName = key.split('/').pop();
         const analysisId = randomUUID();
 
-        const payload = { s3Key: key, fileName, analysisId };
+        const s3Key = `${key}/${fileName}`;
+
+        const payload = { s3Key, fileName, analysisId };
         console.log("Invoking Lambda with payload:", JSON.stringify(payload, null, 2));
 
         const invokeParams = {

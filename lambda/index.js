@@ -66,7 +66,7 @@ exports.handler = async (event) => {
         }
 
         // 3. Call Gemini API with images
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
         const prompt = generateAnalysisPrompt(fileName, pdf.numPages);
         const result = await model.generateContent([prompt, ...imageParts]);
         const response = await result.response;

@@ -13,7 +13,7 @@ exports.handler = async (event) => {
     // --- Start of Gemini API Test ---
     try {
         console.log("--- Starting Gemini API Test ---");
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
         const prompt = "What is the capital of France?";
         
         console.log("Sending request to Gemini API with prompt:", prompt);
