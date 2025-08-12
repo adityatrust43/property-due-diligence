@@ -26,6 +26,8 @@ const AnalysePage: React.FC = () => {
     const { toast } = useToast();
     const [reports, setReports] = useState<S3File[]>([]);
     const [selectedReport, setSelectedReport] = useState<string | null>(null);
+    const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(false);
+    const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(false);
 
     const fetchFiles = useCallback(async () => {
         try {
@@ -279,17 +281,19 @@ const AnalysePage: React.FC = () => {
                     <UserMenu />
                 </div>
             </header>
-            <div className="flex p-4 sm:p-8">
-                <aside className="w-1/3">
+            <div className="flex p-4 sm:p-8 gap-4">
+                <aside className={`transition-all duration-300 flex-shrink-0 ${isLeftSidebarCollapsed ? 'w-20' : 'w-1/3'}`}>
                     <FileBrowser
                         files={files}
                         selectedFiles={selectedFiles}
                         onFileSelectionChange={handleFileSelectionChange}
                         onDeleteFile={handleDeleteFile}
                         onRenameFile={handleRenameFile}
+                        isCollapsed={isLeftSidebarCollapsed}
+                        toggleSidebar={() => setIsLeftSidebarCollapsed(!isLeftSidebarCollapsed)}
                     />
                 </aside>
-                <main className="w-1/3 mx-4">
+                <main className="flex-grow">
                     <section id="file-upload-section" className="mb-8 bg-gray-800 p-6 rounded-lg">
                         <h2 className="text-xl font-semibold text-gray-200 mb-4 text-center">Upload New Document</h2>
                         <FileUpload onUploadSuccess={handleUploadSuccess} disabled={isLoading} />
@@ -332,13 +336,15 @@ const AnalysePage: React.FC = () => {
                         </>
                     )}
                 </main>
-                <aside className="w-1/3">
+                <aside className={`transition-all duration-300 flex-shrink-0 ${isRightSidebarCollapsed ? 'w-20' : 'w-1/3'}`}>
                     <ReportBrowser
                         reports={reports}
                         selectedReport={selectedReport}
                         onReportSelectionChange={handleReportSelectionChange}
                         onDeleteReport={handleDeleteReport}
                         onRenameReport={handleRenameReport}
+                        isCollapsed={isRightSidebarCollapsed}
+                        toggleSidebar={() => setIsRightSidebarCollapsed(!isRightSidebarCollapsed)}
                     />
                 </aside>
             </div>

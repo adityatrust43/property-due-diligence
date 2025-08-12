@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FilePdfIcon, TrashIcon, EditIcon } from './icons';
+import { FilePdfIcon, TrashIcon, EditIcon, ChevronRightIcon, ChevronLeftIcon } from './icons';
 
 export interface S3File {
     key: string;
@@ -14,9 +14,11 @@ interface FileBrowserProps {
     onFileSelectionChange: (key: string) => void;
     onDeleteFile: (key: string) => void;
     onRenameFile: (key: string, newName: string) => void;
+    isCollapsed: boolean;
+    toggleSidebar: () => void;
 }
 
-const FileBrowser: React.FC<FileBrowserProps> = ({ files, selectedFiles, onFileSelectionChange, onDeleteFile, onRenameFile }) => {
+const FileBrowser: React.FC<FileBrowserProps> = ({ files, selectedFiles, onFileSelectionChange, onDeleteFile, onRenameFile, isCollapsed, toggleSidebar }) => {
     const [renamingKey, setRenamingKey] = useState<string | null>(null);
     const [newName, setNewName] = useState('');
 
@@ -39,7 +41,18 @@ const FileBrowser: React.FC<FileBrowserProps> = ({ files, selectedFiles, onFileS
 
     return (
         <div className="bg-gray-800 p-4 rounded-lg h-full">
-            <h3 className="text-lg font-semibold text-white mb-4">Your Documents</h3>
+            <div className="flex justify-between items-center mb-4">
+                {!isCollapsed && <h3 className="text-lg font-semibold text-white">Your Documents</h3>}
+                <button onClick={toggleSidebar} className="text-gray-400 hover:text-white">
+                    {isCollapsed ? <ChevronRightIcon className="w-5 h-5" /> : <ChevronLeftIcon className="w-5 h-5" />}
+                </button>
+            </div>
+            {isCollapsed && (
+                <div className="flex justify-center items-start h-full pt-8">
+                    <h3 className="text-lg font-semibold text-white transform -rotate-90">Your Documents</h3>
+                </div>
+            )}
+            {!isCollapsed && (
             <ul className="space-y-2">
                 {files.map(file => (
                     <li key={file.key} className="flex items-center justify-between bg-gray-700 p-2 rounded-md">
@@ -81,6 +94,7 @@ const FileBrowser: React.FC<FileBrowserProps> = ({ files, selectedFiles, onFileS
                     </li>
                 ))}
             </ul>
+            )}
         </div>
     );
 };
