@@ -1,13 +1,17 @@
 'use client';
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import withSimpleAuth from '../../components/withSimpleAuth';
+import { Button } from '@/components/ui/button';
+import { DownloadIcon, UploadIcon } from '@/components/property/icons';
 import FileUpload from '../../components/property/FileUpload';
 import LoadingSpinner from '../../components/property/LoadingSpinner';
 import AnalysisDisplay from '../../components/property/AnalysisDisplay';
 import FileBrowser, { S3File } from '../../components/property/FileBrowser';
+import ReportBrowser from '../../components/property/ReportBrowser';
 import UserMenu from '../../components/UserMenu';
 import { DocumentAnalysisOutcome } from '../../types/property';
+import { useToast } from '@/hooks/use-toast';
 
 const AnalysePage: React.FC = () => {
     const [files, setFiles] = useState<S3File[]>([]);
@@ -18,6 +22,10 @@ const AnalysePage: React.FC = () => {
     const [analysisResult, setAnalysisResult] = useState<DocumentAnalysisOutcome | null>(null);
     const [isPolling, setIsPolling] = useState(false);
     const [currentAnalysisId, setCurrentAnalysisId] = useState<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const { toast } = useToast();
+    const [reports, setReports] = useState<S3File[]>([]);
+    const [selectedReport, setSelectedReport] = useState<string | null>(null);
 
     const fetchFiles = useCallback(async () => {
         try {
@@ -34,9 +42,25 @@ const AnalysePage: React.FC = () => {
         }
     }, []);
 
+    const fetchReports = useCallback(async () => {
+        try {
+            const response = await fetch('/api/get-report', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ list: true }),
+            });
+            if (!response.ok) throw new Error('Failed to fetch reports');
+            const data = await response.json();
+            setReports(data.reports);
+        } catch (err) {
+            setError('Failed to load your reports.');
+        }
+    }, []);
+
     useEffect(() => {
         fetchFiles();
-    }, [fetchFiles]);
+        fetchReports();
+    }, [fetchFiles, fetchReports]);
 
     const handleUploadSuccess = useCallback(() => {
         fetchFiles(); // Refresh file list after upload
@@ -137,6 +161,7 @@ const AnalysePage: React.FC = () => {
             setCurrentAnalysisId(analysisId);
             setLoadingMessage("Analysis in progress... This may take a few minutes. We'll check for results automatically.");
             setIsPolling(true);
+            fetchReports();
 
         } catch (err: any) {
             setError(err.message || 'An error occurred while starting the analysis.');
@@ -144,22 +169,95 @@ const AnalysePage: React.FC = () => {
         }
     };
 
+    const handleDownloadReport = () => {
+        if (!analysisResult) return;
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(analysisResult, null, 2));
+        const downloadAnchorNode = document.createElement('a');
+        downloadAnchorNode.setAttribute("href", dataStr);
+        downloadAnchorNode.setAttribute("download", "analysis_report.json");
+        document.body.appendChild(downloadAnchorNode);
+        downloadAnchorNode.click();
+        downloadAnchorNode.remove();
+    };
+
+    const handleLoadReportClick = () => {
+        fileInputRef.current?.click();
+    };
+
+    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const result = JSON.parse(e.target?.result as string);
+                    setAnalysisResult(result);
+                    setError(null);
+                    setIsLoading(false);
+                } catch (err) {
+                    setError("Failed to parse JSON file.");
+                }
+            };
+            reader.readAsText(file);
+        }
+    };
+
+    const handleReportSelectionChange = useCallback(async (key: string) => {
+        setSelectedReport(key);
+        setIsLoading(true);
+        setError(null);
+        setAnalysisResult(null);
+        setLoadingMessage("Loading report...");
+
+        try {
+            const response = await fetch('/api/get-report', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ analysisId: key.split('/').pop()?.replace('.json', '') }),
+            });
+            if (!response.ok) throw new Error('Failed to get report');
+            const result = await response.json();
+            setAnalysisResult(result.report);
+        } catch (err) {
+            setError('Failed to load the selected report.');
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
+
     return (
         <div className="min-h-screen bg-gray-900 text-white">
             <header className="flex justify-between items-center p-4 border-b border-gray-700">
                 <h1 className="text-xl font-bold">Document Analysis</h1>
-                <UserMenu />
+                <div className="flex items-center space-x-4">
+                    {process.env.NODE_ENV === 'development' && (
+                        <>
+                            <Button variant="outline" onClick={handleLoadReportClick}>
+                                <UploadIcon className="w-4 h-4 mr-2" />
+                                Load Report
+                            </Button>
+                            <input
+                                type="file"
+                                ref={fileInputRef}
+                                onChange={handleFileChange}
+                                className="hidden"
+                                accept="application/json"
+                            />
+                        </>
+                    )}
+                    <UserMenu />
+                </div>
             </header>
             <div className="flex p-4 sm:p-8">
-                <aside className="w-1/4">
+                <aside className="w-1/3">
                     <FileBrowser
                         files={files}
-                    selectedFiles={selectedFiles}
-                    onFileSelectionChange={handleFileSelectionChange}
-                    onDeleteFile={handleDeleteFile}
-                />
+                        selectedFiles={selectedFiles}
+                        onFileSelectionChange={handleFileSelectionChange}
+                        onDeleteFile={handleDeleteFile}
+                    />
                 </aside>
-                <main className="w-3/4 ml-8">
+                <main className="w-1/3 mx-4">
                     <section id="file-upload-section" className="mb-8 bg-gray-800 p-6 rounded-lg">
                         <h2 className="text-xl font-semibold text-gray-200 mb-4 text-center">Upload New Document</h2>
                         <FileUpload onUploadSuccess={handleUploadSuccess} disabled={isLoading} />
@@ -191,9 +289,24 @@ const AnalysePage: React.FC = () => {
                     )}
 
                     {analysisResult && (
-                        <AnalysisDisplay result={analysisResult} onShowPdfPage={() => {}} />
+                        <>
+                            <div className="text-center mb-4">
+                                <Button variant="secondary" onClick={handleDownloadReport}>
+                                    <DownloadIcon className="w-4 h-4 mr-2" />
+                                    Download Report JSON
+                                </Button>
+                            </div>
+                            <AnalysisDisplay result={analysisResult} onShowPdfPage={() => {}} />
+                        </>
                     )}
                 </main>
+                <aside className="w-1/3">
+                    <ReportBrowser
+                        reports={reports}
+                        selectedReport={selectedReport}
+                        onReportSelectionChange={handleReportSelectionChange}
+                    />
+                </aside>
             </div>
         </div>
     );

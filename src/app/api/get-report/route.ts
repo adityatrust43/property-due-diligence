@@ -13,13 +13,32 @@ const REPORTS_BUCKET = process.env.NEXT_PUBLIC_S3_REPORTS_BUCKET!;
 
 export async function POST(req: NextRequest) {
     try {
-        const { analysisId } = await req.json();
+        const { analysisId, list } = await req.json();
+
+        // If 'list' is true, return all reports
+        if (list) {
+            const listParams = {
+                Bucket: REPORTS_BUCKET,
+                Prefix: `reports/`,
+            };
+            const { Contents } = await s3Client.send(new ListObjectsV2Command(listParams));
+            const reports = Contents
+              ? Contents.map(item => ({
+                  key: item.Key,
+                  name: item.Key?.split('/').pop(),
+                  lastModified: item.LastModified,
+                  size: item.Size,
+                }))
+              : [];
+            return NextResponse.json({ reports });
+        }
+
+        // Otherwise, fetch a specific report by analysisId
         if (!analysisId) {
             return NextResponse.json({ error: 'Missing analysisId parameter' }, { status: 400 });
         }
 
         const reportKey = `reports/${analysisId}.json`;
-
         const getObjectParams = {
             Bucket: REPORTS_BUCKET,
             Key: reportKey,
@@ -34,8 +53,8 @@ export async function POST(req: NextRequest) {
         if (error.name === 'NoSuchKey') {
             return NextResponse.json({ status: 'PENDING' }, { status: 404 });
         }
-        console.error('Error checking for report:', error);
-        return NextResponse.json({ error: 'Failed to check for report', details: error.message }, { status: 500 });
+        console.error('Error in get-report handler:', error);
+        return NextResponse.json({ error: 'Failed to process report request', details: error.message }, { status: 500 });
     }
 }
 

@@ -97,7 +97,27 @@ const ProcessedDocumentCard: React.FC<{ doc: ProcessedDocument; onShowPdfPage: A
       </div>
 
       {doc.partiesInvolved && (
-        <p className="text-sm text-gray-400 mb-2 ml-8"><span className="font-medium">Parties:</span> {doc.partiesInvolved}</p>
+        <div className="text-sm text-gray-400 mb-2 ml-8">
+          <span className="font-medium">Parties: </span>
+          {(() => {
+            const parties = doc.partiesInvolved;
+            if (typeof parties === 'string') {
+              return parties;
+            }
+            if (Array.isArray(parties)) {
+              return parties.map((party, index) => (
+                <span key={index} className="mr-2">
+                  {party.name} ({party.role}){index < parties.length - 1 ? ',' : ''}
+                </span>
+              ));
+            }
+            if (typeof parties === 'object' && parties !== null) {
+              const party = parties as { name: string; role: string };
+              return `${party.name} (${party.role})`;
+            }
+            return 'N/A';
+          })()}
+        </div>
       )}
 
       {doc.status === 'Unsupported' && doc.unsupportedReason && (
@@ -137,6 +157,9 @@ interface TitleChainEventCardProps {
 
 const TitleChainEventCard: React.FC<TitleChainEventCardProps> = ({ event, onShowPdfPage, findDocumentById }) => {
   const relatedDoc = event.relatedDocumentId ? findDocumentById(event.relatedDocumentId) : undefined;
+  const sourceFileName = relatedDoc ? relatedDoc.sourceFileName : (event as any).sourceFileName || '';
+  const pageRef = relatedDoc ? relatedDoc.pageRangeInSourceFile : String(event.startPage);
+
   return (
     <div className="bg-gray-800 border border-gray-700 shadow-md rounded-lg p-4 relative">
       <div className="absolute -left-3 top-1/2 -translate-y-1/2 bg-blue-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold ring-4 ring-gray-900">
@@ -152,18 +175,16 @@ const TitleChainEventCard: React.FC<TitleChainEventCardProps> = ({ event, onShow
           {event.propertyDescription && <p><strong className="text-gray-200">Property:</strong> {event.propertyDescription}</p>}
           <p className="mt-1"><strong className="text-gray-200">Transaction Summary:</strong> {event.summaryOfTransaction}</p>
         </div>
-        {relatedDoc && (
-          <div className="mt-2">
-             <PdfLink
-                fileName={relatedDoc.sourceFileName}
-                pageRef={relatedDoc.pageRangeInSourceFile}
-                onShowPdfPage={onShowPdfPage}
-                className="text-xs"
-             >
-                View Related Document ({relatedDoc.documentType})
-            </PdfLink>
-          </div>
-        )}
+        <div className="mt-2">
+          <PdfLink
+            fileName={sourceFileName}
+            pageRef={pageRef}
+            onShowPdfPage={onShowPdfPage}
+            className="text-xs"
+          >
+            Preview Document
+          </PdfLink>
+        </div>
       </div>
     </div>
   );
@@ -302,11 +323,11 @@ const AnalysisDisplay: React.FC<AnalysisDisplayProps> = ({ result, onShowPdfPage
               if (b.date) {
                 return 1;
               }
-              return a.originalImageIndex - b.originalImageIndex;
+              return a.startPage - b.startPage;
             })
             .map((doc: ProcessedDocument) => (
               <ProcessedDocumentCard key={doc.documentId} doc={doc} onShowPdfPage={onShowPdfPage} isMultiFile={isMultiFile} />
-          ))}
+            ))}
         </ul>
       </ReportSection>
 

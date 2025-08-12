@@ -6,24 +6,32 @@ const UPLOADS_BUCKET = process.env.UPLOADS_BUCKET_NAME;
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const REPORTS_BUCKET = process.env.REPORTS_BUCKET_NAME;
 
-const getBatchPrompt = (task, fileName, pageCount, batchNum, totalBatches) => `
-You are an expert AI assistant specialized in analyzing legal and property documents.
-The user has provided a document named "${fileName}" which has ${pageCount} pages.
-This is BATCH ${batchNum} of ${totalBatches}. You must analyze ONLY the images provided in this batch.
-Your task is to focus ONLY on the following: ${task}.
-IMPORTANT: Your analysis for this batch will be combined with other batches later. Extract all relevant details from the pages in THIS BATCH ONLY.
-CRITICAL INSTRUCTION: Your entire response MUST be a single, valid JSON object. Do not include any introductory text, phrases like "Here is the JSON you requested," or any text after the closing brace of the JSON object. The response should start with \`{\` and end with \`}\`.
+const getBatchPrompt = (fileName, startPage, batchSize) => `
+You are an OCR expert. You will be provided with ${batchSize} images from the document "${fileName}".
+These images correspond to pages ${startPage} through ${startPage + batchSize - 1}.
+For each image, extract all text content.
+Your response must be a single JSON array, containing one object for each page in the batch.
+Each object must have a "page" number and its "content".
+- If a page has text, use the format: \`{"page": <number>, "content": "..."}\`
+- If a page is blank, use: \`{"page": <number>, "content": "blank"}\`
+Example for a batch starting at page 11 with 2 images:
+[
+  {"page": 11, "content": "Text from page 11..."},
+  {"page": 12, "content": "blank"}
+]
+CRITICAL: Respond ONLY with the JSON array.
 `;
 
-const getSynthesisPrompt = (task, fileName, partialResults) => `
-You are an expert AI assistant specialized in synthesizing legal and property document analysis.
-The user has provided a document named "${fileName}". The document was analyzed in multiple batches.
-The following is a JSON array of the partial analysis results from each batch:
-${JSON.stringify(partialResults, null, 2)}
-
-Your task is to synthesize these partial results into a single, final, and coherent JSON object for the following task: ${task}.
-You must consolidate all the information, remove duplicates, and ensure the final output is a complete and accurate representation of the entire document.
-CRITICAL INSTRUCTION: Your entire response MUST be a single, valid JSON object, structured exactly as requested by the original task. Do not include any introductory text or any text after the closing brace.
+const getSynthesisPrompt = (task, fileName, fullText) => `
+You are an expert AI assistant for legal and property document analysis.
+The user has provided the full text of a document named "${fileName}".
+The full text is provided below:
+---
+${fullText}
+---
+Your task is to perform ONLY the following analysis: ${task}.
+For each item you identify (like a title event or a red flag), you MUST include the \`startPage\` number from which the information was derived.
+CRITICAL INSTRUCTION: Your entire response MUST be a single, valid JSON object. Do not include any introductory text or any text after the closing brace.
 `;
 
 const prompts = {
@@ -36,24 +44,24 @@ const prompts = {
     titleChain: `
         Generate a \`titleChainEvents\` array.
         - Identify all documents representing ownership transfers (e.g., Sale Deed, Gift Deed).
-        - For each event, extract: \`eventId\`, \`order\` (chronological, starting from 0), \`date\`, \`documentType\`, \`transferor\`, \`transferee\`, and a \`summaryOfTransaction\`.
+        - For each event, extract: \`eventId\`, \`order\` (chronological, starting from 0), \`date\`, \`documentType\`, \`transferor\`, \`transferee\`, a \`summaryOfTransaction\`, and the \`startPage\`.
         - Order the events strictly from oldest to newest.
-        - The output for this task must be a JSON object like: \`{"titleChainEvents": [{"eventId": "...", ...}]}\`
+        - The output for this task must be a JSON object like: \`{"titleChainEvents": [{"eventId": "...", "startPage": 1, ...}]}\`
     `,
     documentDetails: `
         Generate a \`processedDocuments\` array.
-        - For each distinct document section, determine its \`documentType\`, \`sourceFileName\`, \`pageRangeInSourceFile\`.
+        - For each distinct document, determine its \`documentType\`, \`sourceFileName\`, and the \`startPage\`.
         - Provide a comprehensive \`summary\` that narrates the document's story and extracts all specific details: names, dates, measurements, monetary amounts, registration numbers, etc. Use markdown tables for structured data.
         - Extract the primary \`date\` and \`partiesInvolved\`.
-        - Assign a unique \`documentId\` and the starting \`originalImageIndex\`.
-        - The output for this task must be a JSON object like: \`{"processedDocuments": [{"documentId": "...", ...}]}\`
+        - Assign a unique \`documentId\`.
+        - The output for this task must be a JSON object like: \`{"processedDocuments": [{"documentId": "...", "startPage": 1, ...}]}\`
     `,
     redFlags: `
         Generate a \`redFlags\` array.
         - Identify potential issues or inconsistencies that a lawyer should be aware of.
-        - For each red flag, provide: \`redFlagId\`, a clear \`description\`, a \`severity\` ('Low', 'Medium', or 'High'), and an actionable \`suggestion\`.
+        - For each red flag, provide: \`redFlagId\`, a clear \`description\`, a \`severity\` ('Low', 'Medium', or 'High'), an actionable \`suggestion\`, and the \`startPage\`.
         - Examples: Discrepancies in names/dates, gaps in the title chain, undischarged mortgages.
-        - The output for this task must be a JSON object like: \`{"redFlags": [{"redFlagId": "...", ...}]}\`
+        - The output for this task must be a JSON object like: \`{"redFlags": [{"redFlagId": "...", "startPage": 1, ...}]}\`
     `
 };
 
@@ -97,7 +105,7 @@ async function getImagesFromS3(bucketName, s3Key) {
         const buffer = await data.Body.transformToByteArray();
         imageParts.push({
             inlineData: {
-                data: buffer.toString("base64"),
+                data: Buffer.from(buffer).toString('base64'),
                 mimeType: "image/png",
             },
         });
@@ -109,65 +117,79 @@ async function getImagesFromS3(bucketName, s3Key) {
 exports.handler = async (event) => {
     console.log("Received event:", JSON.stringify(event, null, 2));
     const { s3Key, fileName, analysisId } = event;
-    const BATCH_SIZE = 10; // Process 10 pages at a time
 
     const apiKey = process.env.GEMINI_API_KEY;
-
     if (!UPLOADS_BUCKET || !REPORTS_BUCKET || !apiKey) {
-        console.error("Missing required environment variables. Check UPLOADS_BUCKET_NAME, REPORTS_BUCKET_NAME, and GEMINI_API_KEY.");
+        console.error("Missing required environment variables.");
         return { statusCode: 500, body: JSON.stringify({ error: "Server configuration error." }) };
     }
 
     try {
-        console.log("Fetching images from S3...");
+        // STAGE 1: OCR with Gemini 1.5 Flash
+        console.log("Fetching images from S3 for OCR...");
         const allImageParts = await getImagesFromS3(UPLOADS_BUCKET, s3Key);
         console.log(`Successfully fetched ${allImageParts.length} images.`);
 
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-        const finalCombinedResult = {};
+        const flashModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const pageContents = [];
+        const BATCH_SIZE = 10;
 
-        console.log("Starting sequential, batched analysis of tasks...");
-
-        for (const [taskKey, taskDescription] of Object.entries(prompts)) {
-            console.log(`--- Starting processing for task: ${taskKey} ---`);
-            const partialResults = [];
-            const totalBatches = Math.ceil(allImageParts.length / BATCH_SIZE);
-
-            for (let i = 0; i < allImageParts.length; i += BATCH_SIZE) {
-                const batchNum = (i / BATCH_SIZE) + 1;
-                const imageBatch = allImageParts.slice(i, i + BATCH_SIZE);
-                console.log(`Processing batch ${batchNum}/${totalBatches} for task ${taskKey} with ${imageBatch.length} images.`);
-
-                try {
-                    const prompt = getBatchPrompt(taskDescription, fileName, allImageParts.length, batchNum, totalBatches);
-                    const result = await model.generateContent([prompt, ...imageBatch]);
-                    const rawText = result.response.text();
-                    const jsonText = extractJson(rawText);
-                    partialResults.push(JSON.parse(jsonText));
-                    console.log(`Successfully processed batch ${batchNum}/${totalBatches} for task ${taskKey}.`);
-                } catch (err) {
-                    console.error(`Error in batch ${batchNum} for task ${taskKey}:`, err);
-                    partialResults.push({ error: `Failed to process batch ${batchNum}`, details: err.message });
-                }
-            }
-
-            console.log(`All batches for task ${taskKey} complete. Synthesizing results...`);
+        for (let i = 0; i < allImageParts.length; i += BATCH_SIZE) {
+            const batchNum = (i / BATCH_SIZE) + 1;
+            const imageBatch = allImageParts.slice(i, i + BATCH_SIZE);
+            const startPage = i + 1;
+            console.log(`Processing OCR batch ${batchNum} (pages ${startPage}-${startPage + imageBatch.length - 1}) with ${imageBatch.length} images.`);
 
             try {
-                const synthesisPrompt = getSynthesisPrompt(taskDescription, fileName, partialResults);
-                const synthesisResult = await model.generateContent(synthesisPrompt);
+                const prompt = getBatchPrompt(fileName, startPage, imageBatch.length);
+                const result = await flashModel.generateContent([prompt, ...imageBatch]);
+                const rawText = result.response.text();
+                // The response should be a JSON array, so we need to find the start and end of it.
+                const arrayStartIndex = rawText.indexOf('[');
+                const arrayEndIndex = rawText.lastIndexOf(']');
+                if (arrayStartIndex === -1 || arrayEndIndex === -1) {
+                    throw new Error("No JSON array found in OCR response.");
+                }
+                const jsonText = rawText.substring(arrayStartIndex, arrayEndIndex + 1);
+                const batchResults = JSON.parse(jsonText);
+                pageContents.push(...batchResults);
+                console.log(`Successfully processed OCR batch ${batchNum}.`);
+            } catch (err) {
+                console.error(`Error in OCR batch ${batchNum}:`, err);
+                // If a batch fails, create error entries for each page in that batch
+                for (let j = 0; j < imageBatch.length; j++) {
+                    pageContents.push({ page: startPage + j, content: `Error in batch: ${err.message}` });
+                }
+            }
+        }
+
+        const fullText = pageContents
+            .map(p => `[Page ${p.page}]\n${p.content}`)
+            .join('\n\n---\n\n');
+        
+        console.log("Text extraction complete. Starting analysis with Gemini 2.5 Pro.");
+
+        // STAGE 2: Analysis with Gemini 2.5 Pro
+        const proModel = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
+        const finalCombinedResult = {};
+
+        for (const [taskKey, taskDescription] of Object.entries(prompts)) {
+            console.log(`--- Starting analysis for task: ${taskKey} ---`);
+            try {
+                const synthesisPrompt = getSynthesisPrompt(taskDescription, fileName, fullText);
+                const synthesisResult = await proModel.generateContent(synthesisPrompt);
                 const rawSynthesisText = synthesisResult.response.text();
                 const finalJsonText = extractJson(rawSynthesisText);
                 const finalParsedJson = JSON.parse(finalJsonText);
                 Object.assign(finalCombinedResult, finalParsedJson);
                 console.log(`Successfully synthesized results for task ${taskKey}.`);
             } catch (err) {
-                console.error(`Error during synthesis for task ${taskKey}:`, err);
-                finalCombinedResult[taskKey] = { error: `Failed to synthesize results for ${taskKey}`, details: err.message };
+                console.error(`Error during analysis for task ${taskKey}:`, err);
+                finalCombinedResult[taskKey] = { error: `Failed to analyze ${taskKey}`, details: err.message };
             }
         }
 
-        console.log("All tasks processed. Writing final report.");
+        console.log("All analysis tasks processed. Writing final report.");
         const reportKey = `reports/${analysisId}.json`;
         const putObjectParams = {
             Bucket: REPORTS_BUCKET,

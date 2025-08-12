@@ -1,13 +1,13 @@
 export interface ProcessedDocument {
   documentId: string; // Unique ID, e.g., "doc_file0_0_saledeed"
   sourceFileName: string; // Name of the source PDF file
-  originalImageIndex: number; // The 0-based index of the first image *in the combined image array* this document section appears in
+  startPage: number; // The 1-based page number where the document starts
   documentType: string; // e.g. Sale Deed, Mutation Record
   pageRangeInSourceFile?: string; // e.g., "Pages 1-5" (within its sourceFileName)
   summary: string; // AI-generated summary of this document section
   status: 'Processed' | 'Unsupported'; // Simplified status
   date?: string; // Optional: Date extracted from the document
-  partiesInvolved?: string; // Optional: Main parties involved
+  partiesInvolved?: Array<{ role: string; name: string; }> | string; // Can be a structured array or a simple string
   unsupportedReason?: string; // Optional: Reason if status is 'Unsupported'
 }
 
@@ -21,6 +21,7 @@ export interface TitleChainEvent {
   propertyDescription?: string; // Brief description of the property involved in this specific event
   summaryOfTransaction: string; // Concise summary of the transaction
   relatedDocumentId?: string; // Optional: documentId from ProcessedDocument if directly related
+  startPage: number; // The 1-based page number where the event was found
 }
 
 export interface RedFlagItem {
@@ -29,6 +30,7 @@ export interface RedFlagItem {
   severity: 'Low' | 'Medium' | 'High'; // Severity level
   suggestion: string; // Suggested next steps or areas to investigate
   relatedDocumentIds?: string[]; // Optional: Array of documentIds from ProcessedDocument related to this flag
+  startPage: number; // The 1-based page number where the flag was identified
 }
 
 export interface PropertySummary {
