@@ -31,37 +31,38 @@ ${fullText}
 ---
 Your task is to perform ONLY the following analysis: ${task}.
 For each item you identify (like a title event or a red flag), you MUST include the \`startPage\` number from which the information was derived.
-CRITICAL INSTRUCTION: Your entire response MUST be a single, valid JSON object. Do not include any introductory text or any text after the closing brace.
+CRITICAL INSTRUCTION: Your entire response MUST be a single, valid JSON object. Do not include any introductory text, markdown formatting, or any text after the closing brace. Your response should be immediately parsable by JSON.parse().
 `;
 
 const prompts = {
     propertySummary: `
         Generate a \`propertySummary\` object.
-        - Based on all documents, determine the \`currentOwner\`.
-        - Provide a concise, one-paragraph \`propertyBrief\` summarizing the property's key identifiers (area, location, address).
-        - The output for this task must be a JSON object like: \`{"propertySummary": {"currentOwner": "...", "propertyBrief": "..."}}\`
+        - Determine the \`currentOwner\`. This should be the name of the individual or entity that currently owns the property based on the latest transaction document.
+        - Provide a concise, one-paragraph \`propertyBrief\` that MUST include the property's size, area, specific location, and full address.
+        - The output for this task MUST be a JSON object with the following structure: \`{"propertySummary": {"currentOwner": "...", "propertyBrief": "..."}}\`
     `,
     titleChain: `
         Generate a \`titleChainEvents\` array.
-        - Identify all documents representing ownership transfers (e.g., Sale Deed, Gift Deed).
-        - For each event, extract: \`eventId\`, \`order\` (chronological, starting from 0), \`date\`, \`documentType\`, \`transferor\`, \`transferee\`, a \`summaryOfTransaction\`, and the \`startPage\`.
-        - Order the events strictly from oldest to newest.
-        - The output for this task must be a JSON object like: \`{"titleChainEvents": [{"eventId": "...", "startPage": 1, ...}]}\`
+        - Identify ONLY documents that represent a transfer of ownership or title (e.g., Sale Deed, Gift Deed, Partition Deed, Release Deed). Exclude documents like mortgage deeds or agreements that do not transfer the title.
+        - For each ownership transfer event, extract: \`eventId\`, \`order\` (chronological, starting from 0), \`date\` of the transaction, \`documentType\`, \`transferor\` (seller/donor), \`transferee\` (buyer/donee), a detailed \`summaryOfTransaction\`, and the \`startPage\`.
+        - Order the events strictly from the oldest to the newest to show the clear history of the title.
+        - The output for this task MUST be a JSON object with the following structure: \`{"titleChainEvents": [{"eventId": "...", "startPage": 1, ...}]}\`
     `,
     documentDetails: `
-        Generate a \`processedDocuments\` array.
-        - For each distinct document, determine its \`documentType\`, \`sourceFileName\`, and the \`startPage\`.
-        - Provide a comprehensive \`summary\` that narrates the document's story and extracts all specific details: names, dates, measurements, monetary amounts, registration numbers, etc. Use markdown tables for structured data.
-        - Extract the primary \`date\` and \`partiesInvolved\`.
+        Generate a \`processedDocuments\` array, ordered chronologically from oldest to newest.
+        - For each distinct document within the file, determine its \`documentType\`, \`sourceFileName\`, and the \`startPage\`.
+        - Provide a comprehensive \`summary\` that narrates the document's story and extracts all specific details: names of all parties, all relevant dates, property measurements, monetary amounts, registration numbers, and any other specific identifiers. Use markdown tables for structured data where appropriate within the summary.
+        - Extract the primary \`date\` of the document and all \`partiesInvolved\`.
         - Assign a unique \`documentId\`.
-        - The output for this task must be a JSON object like: \`{"processedDocuments": [{"documentId": "...", "startPage": 1, ...}]}\`
+        - The output for this task MUST be a JSON object with the following structure: \`{"processedDocuments": [{"documentId": "...", "startPage": 1, ...}]}\`
     `,
     redFlags: `
         Generate a \`redFlags\` array.
-        - Identify potential issues or inconsistencies that a lawyer should be aware of.
-        - For each red flag, provide: \`redFlagId\`, a clear \`description\`, a \`severity\` ('Low', 'Medium', or 'High'), an actionable \`suggestion\`, and the \`startPage\`.
-        - Examples: Discrepancies in names/dates, gaps in the title chain, undischarged mortgages.
-        - The output for this task must be a JSON object like: \`{"redFlags": [{"redFlagId": "...", "startPage": 1, ...}]}\`
+        - Identify potential issues, risks, or inconsistencies that a lawyer should be aware of.
+        - For each red flag, provide: \`redFlagId\`, a clear \`description\` of the issue, a \`severity\`, an actionable \`suggestion\`, and the \`startPage\`.
+        - Set \`severity\` to 'High' ONLY if you are highly certain that the issue represents a serious legal problem or a major risk (e.g., a clear break in the title chain, an active lien or mortgage that is not discharged). Use 'Medium' for potential issues that require further investigation and 'Low' for minor discrepancies.
+        - Examples of red flags: Discrepancies in names or dates across documents, gaps in the title chain, undischarged mortgages, unclear property descriptions.
+        - The output for this task MUST be a JSON object with the following structure: \`{"redFlags": [{"redFlagId": "...", "startPage": 1, ...}]}\`
     `
 };
 
@@ -190,7 +191,28 @@ exports.handler = async (event) => {
         }
 
         console.log("All analysis tasks processed. Writing final report.");
-        const reportKey = `reports/${analysisId}.json`;
+
+        // Generate date string in DD_MM_YY format
+        const now = new Date();
+        const day = String(now.getDate()).padStart(2, '0');
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const year = String(now.getFullYear()).slice(-2);
+        const dateStr = `${day}_${month}_${year}`;
+
+        // Sanitize file name and prepare for report naming
+        const sanitizedFileName = fileName.replace(/\.[^/.]+$/, "").replace(/[^a-z0-9]/gi, '-').toLowerCase();
+        const reportPrefix = `reports/${sanitizedFileName}-${dateStr}`;
+
+        // Check for existing reports for the same file on the same day
+        const listParams = {
+            Bucket: REPORTS_BUCKET,
+            Prefix: reportPrefix,
+        };
+        const listedObjects = await s3Client.send(new ListObjectsV2Command(listParams));
+        const runNumber = (listedObjects.Contents || []).length + 1;
+
+        const reportKey = `${reportPrefix}-${runNumber}.json`;
+
         const putObjectParams = {
             Bucket: REPORTS_BUCKET,
             Key: reportKey,
