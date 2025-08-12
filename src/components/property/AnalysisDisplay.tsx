@@ -295,9 +295,9 @@ const AnalysisDisplay: React.FC<AnalysisDisplayProps> = ({ result, onShowPdfPage
             <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-blue-700 ml-[0.3rem]"></div>
             {titleChainEvents
               .sort((a: TitleChainEvent, b: TitleChainEvent) => a.order - b.order)
-              .map((event: TitleChainEvent) => (
+              .map((event: TitleChainEvent, index: number) => (
                 <TitleChainEventCard
-                  key={event.eventId}
+                  key={`${event.eventId}-${index}`}
                   event={event}
                   onShowPdfPage={onShowPdfPage}
                   findDocumentById={findDocumentById}

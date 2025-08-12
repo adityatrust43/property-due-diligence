@@ -93,6 +93,37 @@ const AnalysePage: React.FC = () => {
         }
     }, [fetchFiles]);
 
+    const handleDeleteReport = useCallback(async (key: string) => {
+        if (window.confirm('Are you sure you want to delete this report?')) {
+            try {
+                await fetch('/api/delete-report', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key }),
+                });
+                fetchReports(); // Refresh report list
+            } catch (err) {
+                setError('Failed to delete the report.');
+            }
+        }
+    }, [fetchReports]);
+
+    const handleRenameFile = useCallback((key: string, newName: string) => {
+        setFiles(prevFiles =>
+            prevFiles.map(file =>
+                file.key === key ? { ...file, name: newName } : file
+            )
+        );
+    }, []);
+
+    const handleRenameReport = useCallback((key: string, newName: string) => {
+        setReports(prevReports =>
+            prevReports.map(report =>
+                report.key === key ? { ...report, name: newName } : report
+            )
+        );
+    }, []);
+
     const pollForReport = useCallback(async (analysisId: string) => {
         if (!analysisId) return;
         try {
@@ -255,6 +286,7 @@ const AnalysePage: React.FC = () => {
                         selectedFiles={selectedFiles}
                         onFileSelectionChange={handleFileSelectionChange}
                         onDeleteFile={handleDeleteFile}
+                        onRenameFile={handleRenameFile}
                     />
                 </aside>
                 <main className="w-1/3 mx-4">
@@ -305,6 +337,8 @@ const AnalysePage: React.FC = () => {
                         reports={reports}
                         selectedReport={selectedReport}
                         onReportSelectionChange={handleReportSelectionChange}
+                        onDeleteReport={handleDeleteReport}
+                        onRenameReport={handleRenameReport}
                     />
                 </aside>
             </div>

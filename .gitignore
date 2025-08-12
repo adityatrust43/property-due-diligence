@@ -47,6 +47,7 @@ firestore-debug.log
 # Lambda dependencies
 lambda/node_modules
 lambda_v2/node_modules
+lambda_v3/node_modules
 test_lambda/node_modules
 
 # Session Context
@@ -55,3 +56,7 @@ session_context.md
 NUL
 
 old_implementation/*
+
+*.zip
+
+.netlify
