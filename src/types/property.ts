@@ -22,6 +22,7 @@ export interface TitleChainEvent {
   summaryOfTransaction: string; // Concise summary of the transaction
   relatedDocumentId?: string; // Optional: documentId from ProcessedDocument if directly related
   startPage: number; // The 1-based page number where the event was found
+  sourceFileName?: string; // The name of the source PDF file
 }
 
 export interface RedFlagItem {

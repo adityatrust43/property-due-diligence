@@ -12,6 +12,11 @@ import ReportBrowser from '../../components/property/ReportBrowser';
 import UserMenu from '../../components/UserMenu';
 import { DocumentAnalysisOutcome } from '../../types/property';
 import { useToast } from '@/hooks/use-toast';
+import dynamic from 'next/dynamic';
+
+const PdfPreviewModal = dynamic(() => import('../../components/property/PdfPreviewModal'), {
+  ssr: false,
+});
 
 const AnalysePage: React.FC = () => {
     const [files, setFiles] = useState<S3File[]>([]);
@@ -28,6 +33,31 @@ const AnalysePage: React.FC = () => {
     const [selectedReport, setSelectedReport] = useState<string | null>(null);
     const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(false);
     const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(false);
+    const [pdfPreview, setPdfPreview] = useState<any | null>(null);
+    const [pdfCache, setPdfCache] = useState<Record<string, Promise<any>>>({});
+
+    const handleShowPdfPage = async (sourceFileName: string, pageReference?: string) => {
+        try {
+            const pdfDoc = await pdfCache[sourceFileName];
+            if (!pdfDoc) {
+                throw new Error("PDF not pre-loaded. Please select the report again.");
+            }
+            const pageNumber = pageReference ? parseInt(pageReference.split('-')[0], 10) : 1;
+            setPdfPreview({
+                pdfDoc,
+                initialPage: pageNumber,
+                fileName: sourceFileName,
+                totalPages: pdfDoc.numPages,
+            });
+        } catch (error: any) {
+            console.error("Failed to show PDF:", error);
+            toast({
+                title: "Error",
+                description: error.message || `Failed to load PDF: ${sourceFileName}`,
+                variant: "destructive",
+            });
+        }
+    };
 
     const fetchFiles = useCallback(async () => {
         try {
@@ -39,6 +69,7 @@ const AnalysePage: React.FC = () => {
             if (!response.ok) throw new Error('Failed to fetch files');
             const data = await response.json();
             setFiles(data.files);
+            setPdfCache({}); // Clear cache on file refresh
         } catch (err) {
             setError('Failed to load your documents.');
         }
@@ -243,20 +274,35 @@ const AnalysePage: React.FC = () => {
         setLoadingMessage("Loading report...");
 
         try {
-            const response = await fetch('/api/get-report', {
+            const reportId = key.split('/').pop()?.replace('.json', '');
+            const reportResponse = await fetch('/api/get-report', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ analysisId: key.split('/').pop()?.replace('.json', '') }),
+                body: JSON.stringify({ analysisId: reportId }),
             });
-            if (!response.ok) throw new Error('Failed to get report');
-            const result = await response.json();
+            if (!reportResponse.ok) throw new Error('Failed to get report');
+            const result = await reportResponse.json();
             setAnalysisResult(result.report);
+
+            // Pre-load the associated PDF
+            const sourceFileName = result.report?.processedDocuments?.[0]?.sourceFileName;
+            if (sourceFileName && !pdfCache[sourceFileName]) {
+                const file = files.find(f => f.name === sourceFileName);
+                if (file && file.url) {
+                    const pdfjs = await import('pdfjs-dist');
+                    if (typeof window !== 'undefined' && !pdfjs.GlobalWorkerOptions.workerSrc) {
+                        pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+                    }
+                    const loadingTask = pdfjs.getDocument(file.url).promise;
+                    setPdfCache(prevCache => ({ ...prevCache, [sourceFileName]: loadingTask }));
+                }
+            }
         } catch (err) {
             setError('Failed to load the selected report.');
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [files, pdfCache, setPdfCache, toast]);
 
     return (
         <div className="min-h-screen bg-gray-900 text-white">
@@ -332,7 +378,7 @@ const AnalysePage: React.FC = () => {
                                     Download Report JSON
                                 </Button>
                             </div>
-                            <AnalysisDisplay result={analysisResult} onShowPdfPage={() => {}} />
+                            <AnalysisDisplay result={analysisResult} onShowPdfPage={handleShowPdfPage} />
                         </>
                     )}
                 </main>
@@ -348,6 +394,12 @@ const AnalysePage: React.FC = () => {
                     />
                 </aside>
             </div>
+            {pdfPreview && (
+                <PdfPreviewModal
+                    target={pdfPreview}
+                    onClose={() => setPdfPreview(null)}
+                />
+            )}
         </div>
     );
 };

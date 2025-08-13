@@ -96,30 +96,6 @@ const ProcessedDocumentCard: React.FC<{ doc: ProcessedDocument; onShowPdfPage: A
         </span>
       </div>
 
-      {doc.partiesInvolved && (
-        <div className="text-sm text-gray-400 mb-2 ml-8">
-          <span className="font-medium">Parties: </span>
-          {(() => {
-            const parties = doc.partiesInvolved;
-            if (typeof parties === 'string') {
-              return parties;
-            }
-            if (Array.isArray(parties)) {
-              return parties.map((party, index) => (
-                <span key={index} className="mr-2">
-                  {party.name} ({party.role}){index < parties.length - 1 ? ',' : ''}
-                </span>
-              ));
-            }
-            if (typeof parties === 'object' && parties !== null) {
-              const party = parties as { name: string; role: string };
-              return `${party.name} (${party.role})`;
-            }
-            return 'N/A';
-          })()}
-        </div>
-      )}
-
       {doc.status === 'Unsupported' && doc.unsupportedReason && (
         <p className="text-sm text-yellow-300 bg-yellow-900 bg-opacity-50 p-2 rounded-md mb-3 ml-8">{doc.unsupportedReason}</p>
       )}
@@ -143,6 +119,16 @@ const ProcessedDocumentCard: React.FC<{ doc: ProcessedDocument; onShowPdfPage: A
               <FormattedSummary summaryText={doc.summary} />
             </div>
           )}
+           <div className="mt-2">
+              <PdfLink
+                fileName={doc.sourceFileName}
+                pageRef={doc.pageRangeInSourceFile}
+                onShowPdfPage={onShowPdfPage}
+                className="text-xs"
+              >
+                Preview Document
+              </PdfLink>
+          </div>
         </div>
       )}
     </li>
@@ -157,7 +143,7 @@ interface TitleChainEventCardProps {
 
 const TitleChainEventCard: React.FC<TitleChainEventCardProps> = ({ event, onShowPdfPage, findDocumentById }) => {
   const relatedDoc = event.relatedDocumentId ? findDocumentById(event.relatedDocumentId) : undefined;
-  const sourceFileName = relatedDoc ? relatedDoc.sourceFileName : (event as any).sourceFileName || '';
+  const sourceFileName = event.sourceFileName || (relatedDoc ? relatedDoc.sourceFileName : '');
   const pageRef = relatedDoc ? relatedDoc.pageRangeInSourceFile : String(event.startPage);
 
   return (

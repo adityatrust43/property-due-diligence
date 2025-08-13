@@ -11,8 +11,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Missing file or images' }, { status: 400 });
   }
 
-  const filename = file.name;
-  const fileKey = `uploads/admin/${filename}/${filename}`;
+  const originalFilename = file.name;
+  const folderName = originalFilename.replace(/\.[^/.]+$/, ""); // Remove extension
+  const fileKey = `uploads/admin/${folderName}/${originalFilename}`;
 
   try {
     // Convert file and images to buffers
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
 
     // Upload each image to S3
     const imageUploadPromises = imageBuffers.map((buffer, index) => {
-      const imageKey = `uploads/admin/${filename}/images/page_${index + 1}.png`;
+      const imageKey = `uploads/admin/${folderName}/images/page_${index + 1}.png`;
       const imageUploadCommand = new PutObjectCommand({
         Bucket: UPLOADS_BUCKET_NAME,
         Key: imageKey,
@@ -42,7 +43,7 @@ export async function POST(req: NextRequest) {
 
     await Promise.all(imageUploadPromises);
 
-    return NextResponse.json({ message: 'File and images uploaded successfully', key: `uploads/admin/${filename}` });
+    return NextResponse.json({ message: 'File and images uploaded successfully', key: `uploads/admin/${folderName}` });
   } catch (error) {
     console.error('Error processing file upload:', error);
     return NextResponse.json({ error: 'Error processing file upload' }, { status: 500 });

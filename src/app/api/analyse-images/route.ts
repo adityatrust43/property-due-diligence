@@ -18,10 +18,14 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
         }
 
+        // Ensure the s3Key is just the folder path, not the full file path
+        const folderName = fileName.replace(/\.[^/.]+$/, "");
+        const correctS3Key = `${s3Key}/${folderName}`;
+
         const invokeParams = {
             FunctionName: FUNCTION_NAME,
             InvocationType: InvocationType.RequestResponse, // Synchronous invocation
-            Payload: JSON.stringify({ body: JSON.stringify({ imageParts, fileName, s3Key }) }),
+            Payload: JSON.stringify({ body: JSON.stringify({ imageParts, fileName, s3Key: correctS3Key }) }),
         };
 
         const command = new InvokeCommand(invokeParams);

@@ -6,6 +6,7 @@ export interface S3File {
     name: string;
     size: number;
     lastModified: Date;
+    url: string;
 }
 
 interface FileBrowserProps {

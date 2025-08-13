@@ -19,10 +19,12 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Missing key parameter' }, { status: 400 });
         }
 
-        const fileName = key.split('/').pop();
+        // The key from the frontend is the folder path, e.g., "uploads/admin/My File"
+        const s3Key = key;
+        const fileName = `${key.split('/').pop()}.pdf`;
         const analysisId = randomUUID();
 
-        const payload = { s3Key: key, fileName, analysisId };
+        const payload = { s3Key, fileName, analysisId };
         console.log("Invoking Lambda with payload:", JSON.stringify(payload, null, 2));
 
         const invokeParams = {

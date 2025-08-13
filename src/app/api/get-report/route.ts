@@ -22,14 +22,33 @@ export async function POST(req: NextRequest) {
                 Prefix: `reports/`,
             };
             const { Contents } = await s3Client.send(new ListObjectsV2Command(listParams));
-            const reports = Contents
-              ? Contents.map(item => ({
-                  key: item.Key,
-                  name: item.Key?.split('/').pop(),
-                  lastModified: item.LastModified,
-                  size: item.Size,
-                }))
-              : [];
+            
+            const reportPromises = (Contents || [])
+                .filter(item => item.Key && item.Key.endsWith('.json'))
+                .map(async (item) => {
+                    const analysisId = item.Key!.split('/').pop()!.replace('.json', '');
+                    const metadataKey = `reports/${analysisId}.metadata`;
+                    let displayName = item.Key!.split('/').pop(); // Fallback name
+
+                    try {
+                        const metadataParams = { Bucket: REPORTS_BUCKET, Key: metadataKey };
+                        const { Body } = await s3Client.send(new GetObjectCommand(metadataParams));
+                        const metadataContent = await streamToString(Body);
+                        const metadata = JSON.parse(metadataContent);
+                        displayName = metadata.displayName || displayName;
+                    } catch (e) {
+                        // Metadata file not found, use fallback name
+                    }
+
+                    return {
+                        key: item.Key,
+                        name: displayName,
+                        lastModified: item.LastModified,
+                        size: item.Size,
+                    };
+                });
+
+            const reports = await Promise.all(reportPromises);
             return NextResponse.json({ reports });
         }
 
