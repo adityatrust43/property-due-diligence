@@ -38,7 +38,7 @@ ${fullText}
 Your task is to perform ONLY the following analysis: ${task}.
 Use both the transcribed text and the visual descriptions to inform your analysis. For example, a description of a "government stamp" or "multiple signatures" can provide important context.
 For each item you identify (like a title event or a red flag), you MUST include the \`startPage\` number from which the information was derived.
-CRITICAL INSTRUCTION: Your entire response MUST be a single, valid JSON object. Do not include any introductory text, markdown formatting, or any text after the closing brace. Your response should be immediately parsable by JSON.parse().
+ABSOLUTELY CRITICAL: Your entire response MUST be a single, valid JSON object. Do not include any introductory text, markdown formatting, code block markers, or any text whatsoever before the opening brace or after the closing brace. Your response must be immediately parsable by JSON.parse().
 `;
 
 const prompts = {
@@ -46,14 +46,14 @@ const prompts = {
         Generate a \`propertySummary\` object.
         - Determine the \`currentOwner\`. This should be the name of the individual or entity that currently owns the property based on the latest transaction document.
         - Provide a concise, one-paragraph \`propertyBrief\` that MUST include the property's size, area, specific location, and full address.
-        - The output for this task MUST be a JSON object with the following structure: \`{"propertySummary": {"currentOwner": "...", "propertyBrief": "..."}}\`
+        - CRITICAL: The output for this task MUST be a JSON object with the exact following structure: \`{"propertySummary": {"currentOwner": "...", "propertyBrief": "..."}}\`. Do not add any other keys or properties.
     `,
     titleChain: `
         Generate a \`titleChainEvents\` array.
         - Identify ONLY documents that represent a transfer of ownership or title (e.g., Sale Deed, Gift Deed, Partition Deed, Release Deed). Exclude documents like mortgage deeds or agreements that do not transfer the title.
         - For each ownership transfer event, extract: \`eventId\`, \`order\` (chronological, starting from 0), \`date\` of the transaction, \`documentType\`, \`transferor\` (seller/donor), \`transferee\` (buyer/donee), a detailed \`summaryOfTransaction\`, the \`startPage\`, and the \`sourceFileName\`.
         - Order the events strictly from the oldest to the newest to show the clear history of the title.
-        - The output for this task MUST be a JSON object with the following structure: \`{"titleChainEvents": [{"eventId": "...", "startPage": 1, "sourceFileName": "...", ...}]}\`
+        - CRITICAL: The output for this task MUST be a JSON object with the exact following structure: \`{"titleChainEvents": [{"eventId": "...", "order": 0, "date": "...", "documentType": "...", "transferor": "...", "transferee": "...", "summaryOfTransaction": "...", "startPage": 1, "sourceFileName": "..."}]}\`. Do not add any other keys or properties.
     `,
     documentDetails: `
         Generate a \`processedDocuments\` array, ordered chronologically from oldest to newest.
@@ -61,7 +61,7 @@ const prompts = {
         - Provide a comprehensive \`summary\` that narrates the document's story and extracts all specific details: names of all parties, all relevant dates, property measurements, monetary amounts, registration numbers, and any other specific identifiers. Use markdown tables for structured data where appropriate within the summary.
         - Extract the primary \`date\` of the document and all \`partiesInvolved\`.
         - Assign a unique \`documentId\`.
-        - The output for this task MUST be a JSON object with the following structure: \`{"processedDocuments": [{"documentId": "...", "startPage": 1, ...}]}\`
+        - CRITICAL: The output for this task MUST be a JSON object with the exact following structure: \`{"processedDocuments": [{"documentId": "...", "documentType": "...", "date": "...", "partiesInvolved": [], "summary": "...", "startPage": 1, "sourceFileName": "..."}]}\`. Do not add any other keys or properties.
     `,
     redFlags: `
         Generate a \`redFlags\` array.
@@ -69,7 +69,7 @@ const prompts = {
         - For each red flag, provide: \`redFlagId\`, a clear \`description\` of the issue, a \`severity\`, an actionable \`suggestion\`, and the \`startPage\`.
         - Set \`severity\` to 'High' ONLY if you are highly certain that the issue represents a serious legal problem or a major risk (e.g., a clear break in the title chain, an active lien or mortgage that is not discharged). Use 'Medium' for potential issues that require further investigation and 'Low' for minor discrepancies.
         - Examples of red flags: Discrepancies in names or dates across documents, gaps in the title chain, undischarged mortgages, unclear property descriptions.
-        - The output for this task MUST be a JSON object with the following structure: \`{"redFlags": [{"redFlagId": "...", "startPage": 1, ...}]}\`
+        - CRITICAL: The output for this task MUST be a JSON object with the exact following structure: \`{"redFlags": [{"redFlagId": "...", "description": "...", "severity": "...", "suggestion": "...", "startPage": 1}]}\`. Do not add any other keys or properties.
     `
 };
 
@@ -147,7 +147,7 @@ exports.handler = async (event) => {
         const allImageParts = await getImagesFromS3(UPLOADS_BUCKET, s3Key);
         console.log(`Successfully fetched ${allImageParts.length} images.`);
 
-        const flashModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
+        const flashModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
         const pageContents = [];
         const BATCH_SIZE = 10;
 

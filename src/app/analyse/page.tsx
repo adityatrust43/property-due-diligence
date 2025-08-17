@@ -36,6 +36,35 @@ const AnalysePage: React.FC = () => {
     const [pdfPreview, setPdfPreview] = useState<any | null>(null);
     const [pdfCache, setPdfCache] = useState<Record<string, Promise<any>>>({});
 
+    const preloadPdf = useCallback(async (sourceFileName: string) => {
+        if (sourceFileName && !pdfCache[sourceFileName]) {
+            const file = files.find(f => f.name === sourceFileName);
+            if (file && file.url) {
+                try {
+                    const pdfjs = await import('pdfjs-dist');
+                    if (typeof window !== 'undefined' && !pdfjs.GlobalWorkerOptions.workerSrc) {
+                        pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+                    }
+                    const loadingTask = pdfjs.getDocument(file.url).promise;
+                    setPdfCache(prevCache => ({ ...prevCache, [sourceFileName]: loadingTask }));
+                    await loadingTask; // Wait for it to be cached
+                    toast({
+                        title: "PDF Ready",
+                        description: `${sourceFileName} is pre-loaded and ready for preview.`,
+                    });
+                } catch (error) {
+                    console.error(`Failed to preload PDF: ${sourceFileName}`, error);
+                    toast({
+                        title: "PDF Load Error",
+                        description: `Could not preload ${sourceFileName}. You may need to select it manually.`,
+                        variant: "destructive",
+                    });
+                }
+            }
+        }
+    }, [files, pdfCache, toast]);
+
+
     const handleShowPdfPage = async (sourceFileName: string, pageReference?: string) => {
         try {
             const pdfDoc = await pdfCache[sourceFileName];
@@ -93,6 +122,14 @@ const AnalysePage: React.FC = () => {
     useEffect(() => {
         fetchFiles();
         fetchReports();
+
+        const ongoingAnalysisId = sessionStorage.getItem('currentAnalysisId');
+        if (ongoingAnalysisId) {
+            setCurrentAnalysisId(ongoingAnalysisId);
+            setIsPolling(true);
+            setLoadingMessage("Analysis is in progress from a previous session. We're checking for results...");
+            setIsLoading(true);
+        }
     }, [fetchFiles, fetchReports]);
 
     const handleUploadSuccess = useCallback(() => {
@@ -176,14 +213,22 @@ const AnalysePage: React.FC = () => {
                 setIsLoading(false);
                 setIsPolling(false);
                 setCurrentAnalysisId(null);
+                sessionStorage.removeItem('currentAnalysisId');
+
+                // Pre-load the associated PDF now that the report is complete
+                const sourceFileName = result.report?.processedDocuments?.[0]?.sourceFileName;
+                if (sourceFileName) {
+                    preloadPdf(sourceFileName);
+                }
             }
         } catch (err) {
             setError('Failed to poll for analysis results.');
             setIsLoading(false);
             setIsPolling(false);
             setCurrentAnalysisId(null);
+            sessionStorage.removeItem('currentAnalysisId');
         }
-    }, []);
+    }, [preloadPdf]);
 
     useEffect(() => {
         if (isPolling && currentAnalysisId) {
@@ -222,6 +267,7 @@ const AnalysePage: React.FC = () => {
             }
 
             const { analysisId } = await response.json();
+            sessionStorage.setItem('currentAnalysisId', analysisId);
             setCurrentAnalysisId(analysisId);
             setLoadingMessage("Analysis in progress... This may take a few minutes. We'll check for results automatically.");
             setIsPolling(true);
@@ -286,23 +332,15 @@ const AnalysePage: React.FC = () => {
 
             // Pre-load the associated PDF
             const sourceFileName = result.report?.processedDocuments?.[0]?.sourceFileName;
-            if (sourceFileName && !pdfCache[sourceFileName]) {
-                const file = files.find(f => f.name === sourceFileName);
-                if (file && file.url) {
-                    const pdfjs = await import('pdfjs-dist');
-                    if (typeof window !== 'undefined' && !pdfjs.GlobalWorkerOptions.workerSrc) {
-                        pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
-                    }
-                    const loadingTask = pdfjs.getDocument(file.url).promise;
-                    setPdfCache(prevCache => ({ ...prevCache, [sourceFileName]: loadingTask }));
-                }
+            if (sourceFileName) {
+                preloadPdf(sourceFileName);
             }
         } catch (err) {
             setError('Failed to load the selected report.');
         } finally {
             setIsLoading(false);
         }
-    }, [files, pdfCache, setPdfCache, toast]);
+    }, [files, pdfCache, preloadPdf, toast]);
 
     return (
         <div className="min-h-screen bg-gray-900 text-white">

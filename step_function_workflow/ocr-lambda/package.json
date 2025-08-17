@@ -1,0 +1,15 @@
+{
+  "name": "ocr-lambda",
+  "version": "1.0.0",
+  "description": "Performs OCR on a batch of images using Gemini 1.5 Flash.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.525.0",
+    "@google/generative-ai": "^0.1.3"
+  }
+}

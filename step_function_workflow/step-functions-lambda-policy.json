@@ -1,0 +1,18 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "lambda:InvokeFunction"
+            ],
+            "Resource": [
+                "arn:aws:lambda:us-east-1:530349877694:function:split-pdf-lambda",
+                "arn:aws:lambda:us-east-1:530349877694:function:ocr-lambda",
+                "arn:aws:lambda:us-east-1:530349877694:function:aggregate-ocr-lambda",
+                "arn:aws:lambda:us-east-1:530349877694:function:analysis-lambda",
+                "arn:aws:lambda:us-east-1:530349877694:function:aggregate-analysis-lambda"
+            ]
+        }
+    ]
+}

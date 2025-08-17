@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { LambdaClient, InvokeCommand, InvocationType } from '@aws-sdk/client-lambda';
+import { SFNClient, StartExecutionCommand } from '@aws-sdk/client-sfn';
 import { randomUUID } from 'crypto';
 
-const lambdaClient = new LambdaClient({
+const sfnClient = new SFNClient({
     region: process.env.NEXT_PUBLIC_AWS_REGION,
     credentials: {
         accessKeyId: process.env.MY_AWS_ACCESS_KEY_ID!,
@@ -10,7 +10,7 @@ const lambdaClient = new LambdaClient({
     }
 });
 
-const FUNCTION_NAME = 'document-analysis-function-v2';
+const STATE_MACHINE_ARN = 'arn:aws:states:us-east-1:530349877694:stateMachine:pdf-processing-workflow';
 
 export async function POST(req: NextRequest) {
     try {
@@ -25,23 +25,23 @@ export async function POST(req: NextRequest) {
         const analysisId = randomUUID();
 
         const payload = { s3Key, fileName, analysisId };
-        console.log("Invoking Lambda with payload:", JSON.stringify(payload, null, 2));
+        console.log("Starting Step Functions execution with payload:", JSON.stringify(payload, null, 2));
 
-        const invokeParams = {
-            FunctionName: FUNCTION_NAME,
-            InvocationType: InvocationType.Event, // Asynchronous invocation
-            Payload: JSON.stringify(payload),
+        const startExecutionParams = {
+            stateMachineArn: STATE_MACHINE_ARN,
+            input: JSON.stringify(payload),
+            name: `analysis-${analysisId}` // Execution name must be unique
         };
 
-        const command = new InvokeCommand(invokeParams);
-        const result = await lambdaClient.send(command);
+        const command = new StartExecutionCommand(startExecutionParams);
+        const result = await sfnClient.send(command);
 
-        console.log("Lambda invocation result:", result);
+        console.log("Step Functions execution started:", result);
 
         return NextResponse.json({ success: true, message: 'Analysis started', analysisId });
 
     } catch (error: any) {
-        console.error('Error invoking Lambda function:', error);
+        console.error('Error starting Step Functions execution:', error);
         return NextResponse.json({ error: 'Failed to start analysis', details: error.message }, { status: 500 });
     }
 }

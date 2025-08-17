@@ -60,3 +60,5 @@ old_implementation/*
 *.zip
 
 .netlify
+node_modules
+step_function_workflow/*/node_modules

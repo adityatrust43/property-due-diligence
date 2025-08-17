@@ -1,0 +1,113 @@
+{
+  "Comment": "A Step Function to parallelize the document analysis workflow.",
+  "StartAt": "SplitPdf",
+  "States": {
+    "SplitPdf": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:530349877694:function:split-pdf-lambda",
+      "Next": "ParallelOcr",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "WorkflowFailed"
+        }
+      ]
+    },
+    "ParallelOcr": {
+      "Type": "Map",
+      "InputPath": "$",
+      "ItemsPath": "$.batches",
+      "MaxConcurrency": 10,
+      "Iterator": {
+        "StartAt": "OcrTask",
+        "States": {
+          "OcrTask": {
+            "Type": "Task",
+            "Resource": "arn:aws:lambda:us-east-1:530349877694:function:ocr-lambda",
+            "End": true
+          }
+        }
+      },
+      "ResultPath": "$.ocrResults",
+      "Next": "AggregateOcrResults",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "WorkflowFailed"
+        }
+      ]
+    },
+    "AggregateOcrResults": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:530349877694:function:aggregate-ocr-lambda",
+      "ResultPath": "$.aggregatedOcr",
+      "Next": "ParallelAnalysis",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "WorkflowFailed"
+        }
+      ]
+    },
+    "ParallelAnalysis": {
+      "Type": "Map",
+      "InputPath": "$.aggregatedOcr",
+      "ItemsPath": "$.analysisTasks",
+      "MaxConcurrency": 4,
+      "Iterator": {
+        "StartAt": "AnalysisTask",
+        "States": {
+          "AnalysisTask": {
+            "Type": "Task",
+            "Resource": "arn:aws:lambda:us-east-1:530349877694:function:analysis-lambda",
+            "End": true
+          }
+        }
+      },
+      "Parameters": {
+        "fullTextS3Path.$": "$.fullTextS3Path",
+        "fileName.$": "$.fileName",
+        "taskKey.$": "$$.Map.Item.Value"
+      },
+      "ResultPath": "$.analysisResults",
+      "Next": "AggregateAnalysisResults",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "WorkflowFailed"
+        }
+      ]
+    },
+    "AggregateAnalysisResults": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:530349877694:function:aggregate-analysis-lambda",
+      "Parameters": {
+        "analysisId.$": "$.analysisId",
+        "fileName.$": "$.fileName",
+        "analysisResults.$": "$.analysisResults"
+      },
+      "End": true,
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "WorkflowFailed"
+        }
+      ]
+    },
+    "WorkflowFailed": {
+      "Type": "Fail",
+      "Cause": "The workflow failed.",
+      "Error": "See execution history for details."
+    }
+  }
+}

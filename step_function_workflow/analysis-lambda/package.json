@@ -1,0 +1,14 @@
+{
+  "name": "analysis-lambda",
+  "version": "1.0.0",
+  "description": "Performs a specific analysis task on the full text using Gemini 2.5 Pro.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@google/generative-ai": "^0.1.3"
+  }
+}
