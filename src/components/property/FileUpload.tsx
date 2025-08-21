@@ -64,26 +64,55 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess, disabled }) =>
           images.push(blob as Blob);
         }
 
-        setUploadProgress(prev => ({ ...prev, [file.name]: { processed: numPages, total: numPages, message: 'Uploading...' } }));
+        setUploadProgress(prev => ({ ...prev, [file.name]: { processed: numPages, total: numPages, message: 'Preparing upload...' } }));
 
-        const formData = new FormData();
-        formData.append('file', file);
-        images.forEach((image, index) => {
-          formData.append('images', image, `page_${index + 1}.png`);
-        });
+        const folderName = file.name.replace(/\.[^/.]+$/, "");
+        const filesToUpload = [
+          { name: `${folderName}/${file.name}`, type: file.type, data: file },
+          ...images.map((image, index) => ({
+            name: `${folderName}/images/page_${index + 1}.png`,
+            type: 'image/png',
+            data: image,
+          })),
+        ];
 
-        const response = await fetch('/api/upload', {
+        const urlResponse = await fetch('/api/generate-upload-urls', {
           method: 'POST',
-          body: formData,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ files: filesToUpload.map(f => ({ name: f.name, type: f.type })) }),
         });
 
-        if (!response.ok) {
-          throw new Error('Upload failed');
+        if (!urlResponse.ok) {
+          throw new Error('Failed to get upload URLs');
         }
 
-        const { key } = await response.json();
+        const { urls } = await urlResponse.json();
 
-        setUploadProgress(prev => ({ ...prev, [file.name]: { processed: numPages, total: numPages, message: 'Complete' } }));
+        setUploadProgress(prev => ({ ...prev, [file.name]: { processed: 0, total: filesToUpload.length, message: `Uploading 1 of ${filesToUpload.length}...` } }));
+
+        await Promise.all(
+          urls.map(async (urlInfo: { name: string, url: string }, index: number) => {
+            const fileToUpload = filesToUpload.find(f => f.name === urlInfo.name);
+            if (fileToUpload) {
+              await fetch(urlInfo.url, {
+                method: 'PUT',
+                body: fileToUpload.data,
+                headers: { 'Content-Type': fileToUpload.type },
+              });
+              setUploadProgress(prev => ({
+                ...prev,
+                [file.name]: {
+                  processed: index + 1,
+                  total: filesToUpload.length,
+                  message: `Uploading ${index + 1} of ${filesToUpload.length}...`
+                }
+              }));
+            }
+          })
+        );
+
+        const key = `uploads/admin/${folderName}`;
+        setUploadProgress(prev => ({ ...prev, [file.name]: { processed: filesToUpload.length, total: filesToUpload.length, message: 'Complete' } }));
         console.log(`Successfully uploaded ${file.name}. S3 Key: ${key}`);
         onUploadSuccess(key);
       } catch (error) {
