@@ -8,9 +8,7 @@
       "Next": "ParallelOcr",
       "Catch": [
         {
-          "ErrorEquals": [
-            "States.ALL"
-          ],
+          "ErrorEquals": [ "States.ALL" ],
           "Next": "WorkflowFailed"
         }
       ]
@@ -34,9 +32,7 @@
       "Next": "AggregateOcrResults",
       "Catch": [
         {
-          "ErrorEquals": [
-            "States.ALL"
-          ],
+          "ErrorEquals": [ "States.ALL" ],
           "Next": "WorkflowFailed"
         }
       ]
@@ -48,43 +44,63 @@
       "Next": "ParallelAnalysis",
       "Catch": [
         {
-          "ErrorEquals": [
-            "States.ALL"
-          ],
+          "ErrorEquals": [ "States.ALL" ],
           "Next": "WorkflowFailed"
         }
       ]
     },
     "ParallelAnalysis": {
-      "Type": "Map",
-      "InputPath": "$.aggregatedOcr",
-      "ItemsPath": "$.analysisTasks",
-      "MaxConcurrency": 4,
-      "Iterator": {
-        "StartAt": "AnalysisTask",
-        "States": {
-          "AnalysisTask": {
-            "Type": "Task",
-            "Resource": "arn:aws:lambda:us-east-1:530349877694:function:analysis-lambda",
-            "End": true
-          }
-        }
-      },
-      "Parameters": {
-        "fullTextS3Path.$": "$.fullTextS3Path",
-        "fileName.$": "$.fileName",
-        "taskKey.$": "$$.Map.Item.Value"
-      },
-      "ResultPath": "$.analysisResults",
+      "Type": "Parallel",
       "Next": "AggregateAnalysisResults",
       "Catch": [
         {
-          "ErrorEquals": [
-            "States.ALL"
-          ],
+          "ErrorEquals": [ "States.ALL" ],
           "Next": "WorkflowFailed"
         }
-      ]
+      ],
+      "Branches": [
+        {
+          "StartAt": "ExistingAnalysis",
+          "States": {
+            "ExistingAnalysis": {
+              "Type": "Map",
+              "InputPath": "$.aggregatedOcr",
+              "ItemsPath": "$.analysisTasks",
+              "MaxConcurrency": 4,
+              "Iterator": {
+                "StartAt": "AnalysisTask",
+                "States": {
+                  "AnalysisTask": {
+                    "Type": "Task",
+                    "Resource": "arn:aws:lambda:us-east-1:530349877694:function:analysis-lambda",
+                    "End": true
+                  }
+                }
+              },
+              "Parameters": {
+                "fullTextS3Path.$": "$.fullTextS3Path",
+                "fileName.$": "$.fileName",
+                "taskKey.$": "$$.Map.Item.Value"
+              },
+              "ResultPath": "$.analysisResults",
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "IndexedDocumentAnalysis",
+          "States": {
+            "IndexedDocumentAnalysis": {
+              "Type": "Task",
+              "Resource": "arn:aws:lambda:us-east-1:530349877694:function:indexed-document-lambda",
+              "InputPath": "$.aggregatedOcr",
+              "ResultPath": "$.indexedDocumentResult",
+              "End": true
+            }
+          }
+        }
+      ],
+      "ResultPath": "$.parallelAnalysisOutput"
     },
     "AggregateAnalysisResults": {
       "Type": "Task",
@@ -92,14 +108,12 @@
       "Parameters": {
         "analysisId.$": "$.analysisId",
         "fileName.$": "$.fileName",
-        "analysisResults.$": "$.analysisResults"
+        "parallelAnalysisOutput.$": "$.parallelAnalysisOutput"
       },
       "End": true,
       "Catch": [
         {
-          "ErrorEquals": [
-            "States.ALL"
-          ],
+          "ErrorEquals": [ "States.ALL" ],
           "Next": "WorkflowFailed"
         }
       ]

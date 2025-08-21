@@ -6,23 +6,24 @@ const REPORTS_BUCKET = process.env.REPORTS_BUCKET_NAME;
 exports.handler = async (event) => {
     console.log("Received event for final aggregation:", JSON.stringify(event, null, 2));
 
-    // The input from the previous step will be an object that contains the results
-    // of the analysis map state, as well as the initial input.
-    const { analysisId, fileName, analysisResults } = event;
+    const { analysisId, fileName, parallelAnalysisOutput } = event;
 
     if (!REPORTS_BUCKET) {
         throw new Error("Missing required environment variable: REPORTS_BUCKET_NAME.");
     }
-    if (!analysisId || !fileName || !analysisResults) {
-        throw new Error("Missing required input parameters: analysisId, fileName, analysisResults.");
+    if (!analysisId || !fileName || !parallelAnalysisOutput) {
+        throw new Error("Missing required input parameters: analysisId, fileName, parallelAnalysisOutput.");
     }
 
     try {
-        // The 'analysisResults' is the array of outputs from the parallel analysis lambda.
+        const [existingAnalysis, indexedDocumentResult] = parallelAnalysisOutput;
+        const { analysisResults } = existingAnalysis;
+
         const finalCombinedResult = {};
         analysisResults.forEach(result => {
             Object.assign(finalCombinedResult, result);
         });
+        Object.assign(finalCombinedResult, indexedDocumentResult.indexedDocumentResult);
 
         console.log("All analysis tasks successfully aggregated. Writing final report.");
 

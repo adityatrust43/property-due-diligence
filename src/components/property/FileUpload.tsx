@@ -117,7 +117,11 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess, disabled }) =>
         onUploadSuccess(key);
       } catch (error) {
         console.error(`Error uploading ${file.name}:`, error);
-        alert(`Error uploading ${file.name}. Please try again.`);
+        let errorMessage = `Error uploading ${file.name}. Please try again.`;
+        if (error instanceof Error && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError'))) {
+            errorMessage += '\n\nThis is likely a CORS configuration issue on the S3 bucket. Please ensure the bucket allows PUT requests from this domain.';
+        }
+        alert(errorMessage);
         setUploadProgress(prev => ({ ...prev, [file.name]: { processed: 0, total: 0, message: 'Error' } }));
       }
     }
