@@ -29,7 +29,7 @@ ${fullText}
 ---
 Your task is to perform ONLY the following analysis: ${task}.
 Use both the transcribed text and the visual descriptions to inform your analysis. For example, a description of a "government stamp" or "multiple signatures" can provide important context.
-For each item you identify (like a title event or a red flag), you MUST include the \`startPage\` number from which the information was derived.
+For each item you identify (like a title event, a processed document, or a red flag), you MUST include the \`startPage\` number from which the information was derived.
 ABSOLUTELY CRITICAL: Your entire response MUST be a single, valid JSON object. Do not include any introductory text, markdown formatting, code block markers, or any text whatsoever before the opening brace or after the closing brace. Your response must be immediately parsable by JSON.parse().
 `;
 
@@ -49,7 +49,7 @@ const prompts = {
     `,
     documentDetails: `
         Generate a \`processedDocuments\` array, ordered chronologically from oldest to newest.
-        - For each distinct document within the file, determine its \`documentType\`, \`sourceFileName\`, and the \`startPage\`.
+        - For each distinct document within the file, determine its \`documentType\`, \`sourceFileName\`, and the correct \`startPage\`.
         - Provide a comprehensive \`summary\` that narrates the document's story and extracts all specific details: names of all parties, all relevant dates, property measurements, monetary amounts, registration numbers, and any other specific identifiers. Use markdown tables for structured data where appropriate within the summary.
         - Extract the primary \`date\` of the document and all \`partiesInvolved\`.
         - Assign a unique \`documentId\`.
